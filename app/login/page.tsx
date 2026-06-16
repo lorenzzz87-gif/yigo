@@ -6,7 +6,7 @@ import { store } from '@/lib/store'
 export default function LoginPage() {
   const router = useRouter()
   const [tab, setTab] = useState<'login' | 'register'>('login')
-  const [phone, setPhone] = useState('')
+  const [phone, setPhone] = useState('+39 ')
   const [password, setPassword] = useState('')
   const [name, setName] = useState('')
   const [loading, setLoading] = useState(false)
@@ -25,7 +25,7 @@ export default function LoginPage() {
 
   async function handleRegister() {
     if (!name || !phone || !password) { setError('请填写所有字段'); return }
-    if (!/^1[3-9]\d{9}$/.test(phone)) { setError('请输入正确的手机号'); return }
+    if (phone.trim().length < 6) { setError('请输入正确的手机号'); return }
     if (password.length < 6) { setError('密码至少6位'); return }
     setLoading(true); setError('')
     const result = await store.registerBuyer(name, phone, password)
