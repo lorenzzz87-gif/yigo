@@ -54,6 +54,11 @@ export default function BuyerPage() {
     showToast('下单成功！')
   }
 
+  function productEmoji(categoryId: string) {
+    const map: Record<string, string> = { c1: '🥤', c2: '🍟', c3: '🧴', c4: '🌾' }
+    return map[categoryId] || '📦'
+  }
+
   const filtered = products.filter(p => {
     const matchCat = selectedCat === 'all' || p.categoryId === selectedCat
     const matchSearch = !search || p.name.includes(search)
@@ -80,13 +85,11 @@ export default function BuyerPage() {
     <div className="min-h-screen bg-gray-50 pb-20">
       <Navbar user={user} title="采购下单" />
 
-      {/* Toast */}
       {toast && (
         <div className="fixed top-16 left-1/2 -translate-x-1/2 bg-gray-800 text-white text-sm px-4 py-2 rounded-full z-50 shadow">{toast}</div>
       )}
 
       <div className="max-w-4xl mx-auto px-4 py-4">
-        {/* Tab Content */}
         {tab === 'shop' && (
           <div>
             <div className="flex gap-2 mb-3">
@@ -103,8 +106,13 @@ export default function BuyerPage() {
                 const inCart = cart.find(i => i.productId === p.id)
                 return (
                   <div key={p.id} className="bg-white rounded-xl p-3 shadow-sm">
-                    <div className="bg-orange-50 rounded-lg h-24 flex items-center justify-center mb-2 text-3xl">
-                      {p.categoryId === 'c1' ? '🥤' : p.categoryId === 'c2' ? '🍟' : p.categoryId === 'c3' ? '🧴' : '🌾'}
+                    {/* Product image */}
+                    <div className="rounded-lg h-28 overflow-hidden bg-orange-50 flex items-center justify-center mb-2">
+                      {p.image ? (
+                        <img src={p.image} alt={p.name} className="w-full h-full object-cover" />
+                      ) : (
+                        <span className="text-4xl">{productEmoji(p.categoryId)}</span>
+                      )}
                     </div>
                     <div className="font-medium text-gray-800 text-sm mb-0.5 truncate">{p.name}</div>
                     <div className="text-xs text-gray-400 mb-2">库存: {p.stock} {p.unit}</div>
@@ -139,12 +147,19 @@ export default function BuyerPage() {
                     const p = products.find(p => p.id === item.productId)
                     if (!p) return null
                     return (
-                      <div key={item.productId} className="bg-white rounded-xl p-4 shadow-sm flex items-center justify-between">
-                        <div>
-                          <div className="font-medium text-gray-800">{p.name}</div>
+                      <div key={item.productId} className="bg-white rounded-xl p-3 shadow-sm flex items-center gap-3">
+                        <div className="w-14 h-14 rounded-lg overflow-hidden bg-orange-50 flex items-center justify-center shrink-0">
+                          {p.image ? (
+                            <img src={p.image} alt={p.name} className="w-full h-full object-cover" />
+                          ) : (
+                            <span className="text-2xl">{productEmoji(p.categoryId)}</span>
+                          )}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <div className="font-medium text-gray-800 truncate">{p.name}</div>
                           <div className="text-sm text-orange-500">¥{p.price.toFixed(2)} / {p.unit}</div>
                         </div>
-                        <div className="flex items-center gap-2">
+                        <div className="flex items-center gap-2 shrink-0">
                           <button onClick={() => updateQty(item.productId, item.quantity - 1)} className="w-7 h-7 rounded-full bg-gray-100 text-gray-600 font-bold flex items-center justify-center">-</button>
                           <span className="w-6 text-center font-medium">{item.quantity}</span>
                           <button onClick={() => updateQty(item.productId, item.quantity + 1)} className="w-7 h-7 rounded-full bg-orange-500 text-white font-bold flex items-center justify-center">+</button>

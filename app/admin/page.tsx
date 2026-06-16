@@ -1,5 +1,5 @@
 'use client'
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import { store, User, Product, Order, getStatusLabel } from '@/lib/store'
 import Navbar from '@/components/navbar'
@@ -12,9 +12,11 @@ export default function AdminPage() {
   const [products, setProducts] = useState<Product[]>([])
   const [showProductForm, setShowProductForm] = useState(false)
   const [editProduct, setEditProduct] = useState<Product | null>(null)
-  const [form, setForm] = useState({ name: '', categoryId: '', price: '', unit: '件', stock: '', barcode: '', description: '' })
+  const [form, setForm] = useState({ name: '', categoryId: '', price: '', unit: '件', stock: '', barcode: '', description: '', image: '' })
   const [newCatName, setNewCatName] = useState('')
   const [search, setSearch] = useState('')
+  const [imagePreview, setImagePreview] = useState('')
+  const fileInputRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
     const u = store.getCurrentUser()
@@ -31,19 +33,43 @@ export default function AdminPage() {
 
   function openAddProduct() {
     setEditProduct(null)
-    setForm({ name: '', categoryId: store.getCategories()[0]?.id || '', price: '', unit: '件', stock: '', barcode: '', description: '' })
+    setForm({ name: '', categoryId: store.getCategories()[0]?.id || '', price: '', unit: '件', stock: '', barcode: '', description: '', image: '' })
+    setImagePreview('')
     setShowProductForm(true)
   }
 
   function openEditProduct(p: Product) {
     setEditProduct(p)
-    setForm({ name: p.name, categoryId: p.categoryId, price: String(p.price), unit: p.unit, stock: String(p.stock), barcode: p.barcode || '', description: p.description || '' })
+    setForm({ name: p.name, categoryId: p.categoryId, price: String(p.price), unit: p.unit, stock: String(p.stock), barcode: p.barcode || '', description: p.description || '', image: p.image || '' })
+    setImagePreview(p.image || '')
     setShowProductForm(true)
+  }
+
+  function handleImageChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0]
+    if (!file) return
+    if (file.size > 2 * 1024 * 1024) {
+      alert('图片不能超过 2MB')
+      return
+    }
+    const reader = new FileReader()
+    reader.onload = (ev) => {
+      const base64 = ev.target?.result as string
+      setImagePreview(base64)
+      setForm(f => ({ ...f, image: base64 }))
+    }
+    reader.readAsDataURL(file)
+  }
+
+  function removeImage() {
+    setImagePreview('')
+    setForm(f => ({ ...f, image: '' }))
+    if (fileInputRef.current) fileInputRef.current.value = ''
   }
 
   function saveProduct() {
     if (!form.name || !form.price) return
-    const data = { name: form.name, categoryId: form.categoryId, price: parseFloat(form.price), unit: form.unit, stock: parseInt(form.stock) || 0, barcode: form.barcode, description: form.description }
+    const data = { name: form.name, categoryId: form.categoryId, price: parseFloat(form.price), unit: form.unit, stock: parseInt(form.stock) || 0, barcode: form.barcode, description: form.description, image: form.image }
     if (editProduct) store.updateProduct(editProduct.id, data)
     else store.addProduct(data)
     setShowProductForm(false)
@@ -92,6 +118,12 @@ export default function AdminPage() {
     pendingOrders: orders.filter(o => o.status === 'pending').length,
     todayRevenue: orders.filter(o => o.status !== 'cancelled' && o.createdAt.startsWith(new Date().toISOString().slice(0, 10))).reduce((s, o) => s + o.totalAmount, 0),
     totalProducts: products.length,
+  }
+
+  // Default emoji per category for products without image
+  function productEmoji(categoryId: string) {
+    const map: Record<string, string> = { c1: '🥤', c2: '🍟', c3: '🧴', c4: '🌾' }
+    return map[categoryId] || '📦'
   }
 
   if (!user) return null
@@ -167,13 +199,21 @@ export default function AdminPage() {
               {filteredProducts.map(p => {
                 const cat = categories.find(c => c.id === p.categoryId)
                 return (
-                  <div key={p.id} className="bg-white rounded-xl p-4 shadow-sm flex items-center justify-between">
-                    <div>
-                      <div className="font-medium text-gray-800">{p.name}</div>
+                  <div key={p.id} className="bg-white rounded-xl p-3 shadow-sm flex items-center gap-3">
+                    {/* Product image thumbnail */}
+                    <div className="w-14 h-14 rounded-lg overflow-hidden bg-orange-50 flex items-center justify-center shrink-0">
+                      {p.image ? (
+                        <img src={p.image} alt={p.name} className="w-full h-full object-cover" />
+                      ) : (
+                        <span className="text-2xl">{productEmoji(p.categoryId)}</span>
+                      )}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="font-medium text-gray-800 truncate">{p.name}</div>
                       <div className="text-sm text-gray-400">{cat?.name} · {p.unit} · 库存:{p.stock}</div>
                       {p.barcode && <div className="text-xs text-gray-300">条码:{p.barcode}</div>}
                     </div>
-                    <div className="flex items-center gap-3">
+                    <div className="flex items-center gap-3 shrink-0">
                       <span className="font-bold text-orange-500">¥{p.price.toFixed(2)}</span>
                       <button onClick={() => openEditProduct(p)} className="text-xs text-blue-500 hover:underline">编辑</button>
                       <button onClick={() => deleteProduct(p.id)} className="text-xs text-red-400 hover:underline">删除</button>
@@ -207,9 +247,46 @@ export default function AdminPage() {
       {/* Product Form Modal */}
       {showProductForm && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-2xl p-6 w-full max-w-md">
+          <div className="bg-white rounded-2xl p-6 w-full max-w-md max-h-[90vh] overflow-y-auto">
             <h3 className="font-bold text-gray-800 mb-4">{editProduct ? '编辑商品' : '添加商品'}</h3>
             <div className="space-y-3">
+
+              {/* Image Upload */}
+              <div>
+                <label className="text-sm text-gray-500 mb-1 block">商品图片</label>
+                {imagePreview ? (
+                  <div className="relative w-full h-40 rounded-xl overflow-hidden bg-gray-100">
+                    <img src={imagePreview} alt="预览" className="w-full h-full object-cover" />
+                    <button
+                      onClick={removeImage}
+                      className="absolute top-2 right-2 w-7 h-7 bg-black/50 text-white rounded-full flex items-center justify-center text-sm hover:bg-black/70"
+                    >✕</button>
+                  </div>
+                ) : (
+                  <div
+                    onClick={() => fileInputRef.current?.click()}
+                    className="w-full h-32 border-2 border-dashed border-gray-200 rounded-xl flex flex-col items-center justify-center cursor-pointer hover:border-orange-400 hover:bg-orange-50 transition-colors"
+                  >
+                    <span className="text-3xl mb-1">📷</span>
+                    <span className="text-sm text-gray-400">点击上传图片</span>
+                    <span className="text-xs text-gray-300">支持 JPG / PNG，最大 2MB</span>
+                  </div>
+                )}
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept="image/*"
+                  className="hidden"
+                  onChange={handleImageChange}
+                />
+                {!imagePreview && (
+                  <button
+                    onClick={() => fileInputRef.current?.click()}
+                    className="mt-2 text-xs text-orange-500 hover:underline"
+                  >或点击选择图片</button>
+                )}
+              </div>
+
               <div>
                 <label className="text-sm text-gray-500 mb-1 block">商品名称 *</label>
                 <input value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm outline-none focus:border-orange-400" />
@@ -239,6 +316,10 @@ export default function AdminPage() {
               <div>
                 <label className="text-sm text-gray-500 mb-1 block">条形码</label>
                 <input value={form.barcode} onChange={e => setForm({ ...form, barcode: e.target.value })} className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm outline-none focus:border-orange-400" />
+              </div>
+              <div>
+                <label className="text-sm text-gray-500 mb-1 block">商品描述</label>
+                <textarea value={form.description} onChange={e => setForm({ ...form, description: e.target.value })} rows={2} className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm outline-none focus:border-orange-400 resize-none" />
               </div>
             </div>
             <div className="flex gap-3 mt-5">
