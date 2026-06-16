@@ -1,4 +1,5 @@
-// Simple in-memory store using localStorage for demo (no backend needed)
+import { supabase } from './supabase'
+
 export type Role = 'admin' | 'buyer' | 'salesperson'
 
 export interface User {
@@ -63,86 +64,87 @@ export function getStatusLabel(status: Order['status']) {
   return STATUS_LABELS[status]
 }
 
+// localStorage helpers (for cart and current user only)
 function load<T>(key: string, fallback: T): T {
   if (typeof window === 'undefined') return fallback
   try {
     const v = localStorage.getItem(key)
     return v ? JSON.parse(v) : fallback
-  } catch {
-    return fallback
-  }
+  } catch { return fallback }
 }
-
 function save(key: string, value: unknown) {
   if (typeof window === 'undefined') return
   localStorage.setItem(key, JSON.stringify(value))
 }
 
-// Seed default data
-const DEFAULT_CATEGORIES: Category[] = [
-  { id: 'c1', name: '饮料' },
-  { id: 'c2', name: '零食' },
-  { id: 'c3', name: '日用品' },
-  { id: 'c4', name: '粮油' },
-]
-
-const DEFAULT_PRODUCTS: Product[] = [
-  { id: 'p1', name: '可口可乐 330ml', categoryId: 'c1', price: 3.5, unit: '罐', stock: 200, barcode: '6901234567890' },
-  { id: 'p2', name: '农夫山泉 550ml', categoryId: 'c1', price: 2.0, unit: '瓶', stock: 500, barcode: '6901234567891' },
-  { id: 'p3', name: '红牛 250ml', categoryId: 'c1', price: 6.0, unit: '罐', stock: 100, barcode: '6901234567892' },
-  { id: 'p4', name: '薯片（原味）', categoryId: 'c2', price: 8.5, unit: '包', stock: 150, barcode: '6901234567893' },
-  { id: 'p5', name: '方便面（红烧牛肉）', categoryId: 'c2', price: 4.5, unit: '袋', stock: 300, barcode: '6901234567894' },
-  { id: 'p6', name: '洗洁精 1kg', categoryId: 'c3', price: 12.0, unit: '瓶', stock: 80, barcode: '6901234567895' },
-  { id: 'p7', name: '大米 5kg', categoryId: 'c4', price: 38.0, unit: '袋', stock: 60, barcode: '6901234567896' },
-  { id: 'p8', name: '花生油 5L', categoryId: 'c4', price: 88.0, unit: '桶', stock: 40, barcode: '6901234567897' },
-]
-
-const DEFAULT_USERS: User[] = [
-  { id: 'u1', name: '管理员', role: 'admin', phone: '13800000001' },
-  { id: 'u2', name: '张老板（门店A）', role: 'buyer', phone: '13800000002' },
-  { id: 'u3', name: '李老板（门店B）', role: 'buyer', phone: '13800000003' },
-  { id: 'u4', name: '王业务员', role: 'salesperson', phone: '13800000004' },
-]
+// Map DB row → Product
+function toProduct(row: Record<string, unknown>): Product {
+  return {
+    id: row.id as string,
+    name: row.name as string,
+    categoryId: row.category_id as string,
+    price: Number(row.price),
+    unit: row.unit as string,
+    stock: Number(row.stock),
+    barcode: row.barcode as string | undefined,
+    description: row.description as string | undefined,
+    image: row.image as string | undefined,
+  }
+}
 
 export const store = {
-  // Users
-  getUsers(): User[] { return load('yg_users', DEFAULT_USERS) },
+  // Current user (localStorage only — session state)
   getCurrentUser(): User | null { return load('yg_current_user', null) },
   setCurrentUser(user: User | null) { save('yg_current_user', user) },
 
+  // Users
+  async getUsers(): Promise<User[]> {
+    const { data } = await supabase.from('users').select('*')
+    return (data || []).map(r => ({ id: r.id, name: r.name, role: r.role as Role, phone: r.phone }))
+  },
+
   // Categories
-  getCategories(): Category[] { return load('yg_categories', DEFAULT_CATEGORIES) },
-  saveCategories(cats: Category[]) { save('yg_categories', cats) },
-  addCategory(name: string): Category {
-    const cats = this.getCategories()
+  async getCategories(): Promise<Category[]> {
+    const { data } = await supabase.from('categories').select('*')
+    return (data || []).map(r => ({ id: r.id, name: r.name }))
+  },
+  async addCategory(name: string): Promise<Category> {
     const cat = { id: `c${Date.now()}`, name }
-    cats.push(cat)
-    this.saveCategories(cats)
+    await supabase.from('categories').insert(cat)
     return cat
   },
 
   // Products
-  getProducts(): Product[] { return load('yg_products', DEFAULT_PRODUCTS) },
-  saveProducts(products: Product[]) { save('yg_products', products) },
-  addProduct(p: Omit<Product, 'id'>): Product {
-    const products = this.getProducts()
-    const product = { ...p, id: `p${Date.now()}` }
-    products.push(product)
-    this.saveProducts(products)
-    return product
+  async getProducts(): Promise<Product[]> {
+    const { data } = await supabase.from('products').select('*')
+    return (data || []).map(toProduct)
   },
-  updateProduct(id: string, updates: Partial<Product>) {
-    const products = this.getProducts().map(p => p.id === id ? { ...p, ...updates } : p)
-    this.saveProducts(products)
+  async addProduct(p: Omit<Product, 'id'>): Promise<Product> {
+    const product = { id: `p${Date.now()}`, name: p.name, category_id: p.categoryId, price: p.price, unit: p.unit, stock: p.stock, barcode: p.barcode, description: p.description, image: p.image }
+    await supabase.from('products').insert(product)
+    return { ...p, id: product.id }
   },
-  deleteProduct(id: string) {
-    this.saveProducts(this.getProducts().filter(p => p.id !== id))
+  async updateProduct(id: string, updates: Partial<Product>) {
+    const row: Record<string, unknown> = {}
+    if (updates.name !== undefined) row.name = updates.name
+    if (updates.categoryId !== undefined) row.category_id = updates.categoryId
+    if (updates.price !== undefined) row.price = updates.price
+    if (updates.unit !== undefined) row.unit = updates.unit
+    if (updates.stock !== undefined) row.stock = updates.stock
+    if (updates.barcode !== undefined) row.barcode = updates.barcode
+    if (updates.description !== undefined) row.description = updates.description
+    if (updates.image !== undefined) row.image = updates.image
+    await supabase.from('products').update(row).eq('id', id)
   },
-  findByBarcode(barcode: string): Product | undefined {
-    return this.getProducts().find(p => p.barcode === barcode)
+  async deleteProduct(id: string) {
+    await supabase.from('products').delete().eq('id', id)
+  },
+  async findByBarcode(barcode: string): Promise<Product | undefined> {
+    const { data } = await supabase.from('products').select('*').eq('barcode', barcode).single()
+    return data ? toProduct(data) : undefined
   },
 
-  // Cart
+  // Cart (localStorage)
   getCart(): CartItem[] { return load('yg_cart', []) },
   saveCart(cart: CartItem[]) { save('yg_cart', cart) },
   addToCart(productId: string, quantity: number) {
@@ -153,48 +155,67 @@ export const store = {
     this.saveCart(cart)
   },
   updateCartItem(productId: string, quantity: number) {
-    if (quantity <= 0) {
-      this.saveCart(this.getCart().filter(i => i.productId !== productId))
-    } else {
-      const cart = this.getCart().map(i => i.productId === productId ? { ...i, quantity } : i)
-      this.saveCart(cart)
-    }
+    if (quantity <= 0) this.saveCart(this.getCart().filter(i => i.productId !== productId))
+    else this.saveCart(this.getCart().map(i => i.productId === productId ? { ...i, quantity } : i))
   },
   clearCart() { save('yg_cart', []) },
 
   // Orders
-  getOrders(): Order[] { return load('yg_orders', []) },
-  saveOrders(orders: Order[]) { save('yg_orders', orders) },
-  createOrder(buyerId: string, buyerName: string, items: CartItem[], remark?: string, salesId?: string): Order {
-    const products = this.getProducts()
-    const orderItems: OrderItem[] = items.map(item => {
+  async getOrders(): Promise<Order[]> {
+    const { data: orders } = await supabase.from('orders').select('*').order('created_at', { ascending: false })
+    if (!orders || orders.length === 0) return []
+    const orderIds = orders.map(o => o.id)
+    const { data: items } = await supabase.from('order_items').select('*').in('order_id', orderIds)
+    return orders.map(o => ({
+      id: o.id,
+      orderNo: o.order_no,
+      buyerId: o.buyer_id,
+      buyerName: o.buyer_name,
+      salesId: o.sales_id,
+      totalAmount: Number(o.total_amount),
+      status: o.status as Order['status'],
+      createdAt: o.created_at,
+      remark: o.remark,
+      items: (items || []).filter(i => i.order_id === o.id).map(i => ({
+        productId: i.product_id,
+        productName: i.product_name,
+        price: Number(i.price),
+        quantity: i.quantity,
+        unit: i.unit,
+      }))
+    }))
+  },
+  async getOrdersByBuyer(buyerId: string): Promise<Order[]> {
+    const all = await this.getOrders()
+    return all.filter(o => o.buyerId === buyerId)
+  },
+  async createOrder(buyerId: string, buyerName: string, cartItems: CartItem[], products: Product[], remark?: string, salesId?: string): Promise<Order> {
+    const orderItems: OrderItem[] = cartItems.map(item => {
       const p = products.find(p => p.id === item.productId)!
       return { productId: item.productId, productName: p.name, price: p.price, quantity: item.quantity, unit: p.unit }
     })
     const totalAmount = orderItems.reduce((sum, i) => sum + i.price * i.quantity, 0)
-    const order: Order = {
-      id: `o${Date.now()}`,
-      orderNo: `YG${Date.now()}`,
-      buyerId,
-      buyerName,
-      salesId,
-      items: orderItems,
-      totalAmount,
-      status: 'pending',
-      createdAt: new Date().toISOString(),
-      remark,
-    }
-    const orders = this.getOrders()
-    orders.unshift(order)
-    this.saveOrders(orders)
+    const id = `o${Date.now()}`
+    const orderNo = `YG${Date.now()}`
+    await supabase.from('orders').insert({
+      id, order_no: orderNo, buyer_id: buyerId, buyer_name: buyerName,
+      sales_id: salesId || null, total_amount: totalAmount,
+      status: 'pending', remark: remark || null,
+    })
+    const itemRows = orderItems.map((i, idx) => ({
+      id: `oi${Date.now()}${idx}`,
+      order_id: id,
+      product_id: i.productId,
+      product_name: i.productName,
+      price: i.price,
+      quantity: i.quantity,
+      unit: i.unit,
+    }))
+    await supabase.from('order_items').insert(itemRows)
     this.clearCart()
-    return order
+    return { id, orderNo, buyerId, buyerName, salesId, items: orderItems, totalAmount, status: 'pending', createdAt: new Date().toISOString(), remark }
   },
-  updateOrderStatus(id: string, status: Order['status']) {
-    const orders = this.getOrders().map(o => o.id === id ? { ...o, status } : o)
-    this.saveOrders(orders)
-  },
-  getOrdersByBuyer(buyerId: string): Order[] {
-    return this.getOrders().filter(o => o.buyerId === buyerId)
+  async updateOrderStatus(id: string, status: Order['status']) {
+    await supabase.from('orders').update({ status }).eq('id', id)
   },
 }
