@@ -1,61 +1,91 @@
 'use client'
-import { useState, useEffect } from 'react'
+import { useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { store, User } from '@/lib/store'
+import { store } from '@/lib/store'
 
 export default function LoginPage() {
   const router = useRouter()
-  const [selected, setSelected] = useState<string>('')
-  const [users, setUsers] = useState<User[]>([])
+  const [tab, setTab] = useState<'login' | 'register'>('login')
+  const [phone, setPhone] = useState('')
+  const [password, setPassword] = useState('')
+  const [name, setName] = useState('')
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState('')
+  const [success, setSuccess] = useState('')
 
-  useEffect(() => {
-    store.getUsers().then(setUsers)
-  }, [])
-
-  function login() {
-    const user = users.find(u => u.id === selected)
-    if (!user) return
+  async function handleLogin() {
+    if (!phone || !password) { setError('请填写手机号和密码'); return }
+    setLoading(true); setError('')
+    const user = await store.loginByPhone(phone, password)
+    setLoading(false)
+    if (!user) { setError('手机号或密码错误'); return }
     store.setCurrentUser(user)
     router.push(`/${user.role}`)
   }
 
-  const roleLabel: Record<string, string> = { admin: '管理员', buyer: '采购商', salesperson: '业务员' }
-  const roleColor: Record<string, string> = {
-    admin: 'bg-purple-100 text-purple-700',
-    buyer: 'bg-blue-100 text-blue-700',
-    salesperson: 'bg-green-100 text-green-700',
+  async function handleRegister() {
+    if (!name || !phone || !password) { setError('请填写所有字段'); return }
+    if (!/^1[3-9]\d{9}$/.test(phone)) { setError('请输入正确的手机号'); return }
+    if (password.length < 6) { setError('密码至少6位'); return }
+    setLoading(true); setError('')
+    const result = await store.registerBuyer(name, phone, password)
+    setLoading(false)
+    if (!result.ok) { setError(result.msg); return }
+    setSuccess('注册成功！请登录')
+    setTab('login')
+    setName('')
   }
-  const roleIcon: Record<string, string> = { admin: '👑', buyer: '🏪', salesperson: '💼' }
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-orange-50 to-orange-100">
       <div className="bg-white rounded-2xl shadow-lg p-8 w-full max-w-sm">
-        <div className="text-center mb-8">
+        <div className="text-center mb-6">
           <div className="text-4xl font-bold text-orange-500 mb-1">友购</div>
           <div className="text-gray-400 text-sm">最简单的叫货平台</div>
         </div>
-        <div className="mb-6">
-          <label className="block text-sm font-medium text-gray-700 mb-2">选择账号登录</label>
-          <div className="space-y-2">
-            {users.map(u => (
-              <button key={u.id} onClick={() => setSelected(u.id)}
-                className={`w-full flex items-center justify-between p-3 rounded-xl border-2 transition-all ${selected === u.id ? 'border-orange-400 bg-orange-50' : 'border-gray-100 hover:border-gray-300'}`}>
-                <div className="flex items-center gap-3">
-                  <div className="w-9 h-9 rounded-full bg-gray-100 flex items-center justify-center text-lg">{roleIcon[u.role]}</div>
-                  <div className="text-left">
-                    <div className="font-medium text-gray-800">{u.name}</div>
-                    <div className="text-xs text-gray-400">{u.phone}</div>
-                  </div>
-                </div>
-                <span className={`text-xs px-2 py-1 rounded-full font-medium ${roleColor[u.role]}`}>{roleLabel[u.role]}</span>
-              </button>
-            ))}
+
+        <div className="flex bg-gray-100 rounded-xl p-1 mb-6">
+          {(['login', 'register'] as const).map(t => (
+            <button key={t} onClick={() => { setTab(t); setError(''); setSuccess('') }}
+              className={`flex-1 py-2 rounded-lg text-sm font-medium transition-all ${tab === t ? 'bg-white shadow text-orange-500' : 'text-gray-400'}`}>
+              {t === 'login' ? '登录' : '注册'}
+            </button>
+          ))}
+        </div>
+
+        {success && <div className="mb-4 text-sm text-green-600 bg-green-50 rounded-lg px-3 py-2">{success}</div>}
+        {error && <div className="mb-4 text-sm text-red-500 bg-red-50 rounded-lg px-3 py-2">{error}</div>}
+
+        <div className="space-y-3">
+          {tab === 'register' && (
+            <div>
+              <label className="text-sm text-gray-500 block mb-1">姓名 / 店铺名</label>
+              <input value={name} onChange={e => setName(e.target.value)} placeholder="请输入姓名"
+                className="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm outline-none focus:border-orange-400" />
+            </div>
+          )}
+          <div>
+            <label className="text-sm text-gray-500 block mb-1">手机号</label>
+            <input value={phone} onChange={e => setPhone(e.target.value)} placeholder="请输入手机号" type="tel"
+              className="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm outline-none focus:border-orange-400" />
+          </div>
+          <div>
+            <label className="text-sm text-gray-500 block mb-1">密码</label>
+            <input value={password} onChange={e => setPassword(e.target.value)} placeholder={tab === 'register' ? '至少6位' : '请输入密码'} type="password"
+              className="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm outline-none focus:border-orange-400" />
           </div>
         </div>
-        <button onClick={login} disabled={!selected}
-          className="w-full py-3 bg-orange-500 text-white font-semibold rounded-xl hover:bg-orange-600 disabled:opacity-40 disabled:cursor-not-allowed transition-colors">
-          进入系统
+
+        <button onClick={tab === 'login' ? handleLogin : handleRegister} disabled={loading}
+          className="w-full mt-6 py-3 bg-orange-500 text-white font-semibold rounded-xl hover:bg-orange-600 disabled:opacity-50 transition-colors">
+          {loading ? '请稍候…' : tab === 'login' ? '登录' : '注册账号'}
         </button>
+
+        {tab === 'login' && (
+          <p className="text-center text-xs text-gray-400 mt-4">
+            管理员/业务员账号请联系平台
+          </p>
+        )}
       </div>
     </div>
   )

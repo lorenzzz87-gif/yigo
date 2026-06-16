@@ -103,6 +103,19 @@ export const store = {
     const { data } = await supabase.from('users').select('*')
     return (data || []).map(r => ({ id: r.id, name: r.name, role: r.role as Role, phone: r.phone }))
   },
+  async loginByPhone(phone: string, password: string): Promise<User | null> {
+    const { data } = await supabase.from('users').select('*').eq('phone', phone).eq('password', password).single()
+    if (!data) return null
+    return { id: data.id, name: data.name, role: data.role as Role, phone: data.phone }
+  },
+  async registerBuyer(name: string, phone: string, password: string): Promise<{ ok: boolean; msg: string }> {
+    const { data: existing } = await supabase.from('users').select('id').eq('phone', phone).single()
+    if (existing) return { ok: false, msg: '该手机号已注册' }
+    const id = `u${Date.now()}`
+    const { error } = await supabase.from('users').insert({ id, name, phone, password, role: 'buyer' })
+    if (error) return { ok: false, msg: '注册失败，请重试' }
+    return { ok: true, msg: '' }
+  },
 
   // Categories
   async getCategories(): Promise<Category[]> {
