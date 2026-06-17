@@ -2,12 +2,13 @@
 import { useEffect, useState, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import { store, User, Product, Order, Category, getStatusLabel } from '@/lib/store'
+import { exportAllOrders, exportSingleOrder, exportProductTemplate, importProductsFromFile } from '@/lib/excel'
 import Navbar from '@/components/navbar'
 
 export default function AdminPage() {
   const router = useRouter()
   const [user, setUser] = useState<User | null>(null)
-  const [tab, setTab] = useState<'orders' | 'products' | 'categories'>('orders')
+  const [tab, setTab] = useState<'orders' | 'products' | 'import' | 'categories'>('orders')
   const [orders, setOrders] = useState<Order[]>([])
   const [products, setProducts] = useState<Product[]>([])
   const [categories, setCategories] = useState<Category[]>([])
@@ -18,7 +19,12 @@ export default function AdminPage() {
   const [newCatName, setNewCatName] = useState('')
   const [search, setSearch] = useState('')
   const [saving, setSaving] = useState(false)
+  const [exporting, setExporting] = useState(false)
+  const [importing, setImporting] = useState(false)
+  const [importResult, setImportResult] = useState<{ ok: number; errors: string[] } | null>(null)
+  const [toast, setToast] = useState('')
   const fileInputRef = useRef<HTMLInputElement>(null)
+  const importFileRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
     const u = store.getCurrentUser()
@@ -31,6 +37,8 @@ export default function AdminPage() {
     const [o, p, c] = await Promise.all([store.getOrders(), store.getProducts(), store.getCategories()])
     setOrders(o); setProducts(p); setCategories(c)
   }
+
+  function showToast(msg: string) { setToast(msg); setTimeout(() => setToast(''), 3000) }
 
   function openAddProduct() {
     setEditProduct(null)
@@ -79,6 +87,46 @@ export default function AdminPage() {
     await store.addCategory(newCatName.trim()); setNewCatName(''); refreshData()
   }
 
+  async function handleExportAll() {
+    setExporting(true)
+    try {
+      await exportAllOrders(orders.filter(o => o.status !== 'pending_review'))
+      showToast('导出成功！')
+    } catch (e: any) { showToast('导出失败: ' + e.message) }
+    setExporting(false)
+  }
+
+  async function handleExportSingle(order: Order) {
+    setExporting(true)
+    try {
+      await exportSingleOrder(order, products)
+      showToast('导出成功！')
+    } catch (e: any) { showToast('导出失败: ' + e.message) }
+    setExporting(false)
+  }
+
+  async function handleDownloadTemplate() {
+    try { await exportProductTemplate(categories); showToast('模板已下载！') }
+    catch (e: any) { showToast('失败: ' + e.message) }
+  }
+
+  async function handleImportFile(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0]; if (!file) return
+    setImporting(true); setImportResult(null)
+    try {
+      const { products: parsed, errors } = await importProductsFromFile(file, categories)
+      let ok = 0, failed: string[] = []
+      for (const p of parsed) {
+        try { await store.addProduct(p); ok++ }
+        catch (err: any) { failed.push(`${p.name}: ${err.message}`) }
+      }
+      setImportResult({ ok, errors: [...errors, ...failed] })
+      if (ok > 0) await refreshData()
+    } catch (e: any) { showToast('导入失败: ' + e.message) }
+    setImporting(false)
+    e.target.value = ''
+  }
+
   const filteredProducts = products.filter(p => p.name.includes(search) || p.barcode?.includes(search))
 
   const statusActions: Record<Order['status'], { label: string; next: Order['status'] }[]> = {
@@ -93,15 +141,11 @@ export default function AdminPage() {
     pending: 'bg-yellow-100 text-yellow-700', confirmed: 'bg-blue-100 text-blue-700',
     shipped: 'bg-purple-100 text-purple-700', completed: 'bg-green-100 text-green-700', cancelled: 'bg-gray-100 text-gray-500',
   }
-  function productEmoji(categoryId: string) {
-    const map: Record<string, string> = { c1: '🥤', c2: '🍟', c3: '🧴', c4: '🌾' }
-    return map[categoryId] || '📦'
-  }
 
   const stats = {
-    totalOrders: orders.length,
+    totalOrders: orders.filter(o => o.status !== 'pending_review').length,
     pendingOrders: orders.filter(o => o.status === 'pending').length,
-    todayRevenue: orders.filter(o => o.status !== 'cancelled' && o.createdAt.startsWith(new Date().toISOString().slice(0, 10))).reduce((s, o) => s + o.totalAmount, 0),
+    todayRevenue: orders.filter(o => !['cancelled', 'pending_review'].includes(o.status) && o.createdAt.startsWith(new Date().toISOString().slice(0, 10))).reduce((s, o) => s + o.totalAmount, 0),
     totalProducts: products.length,
   }
 
@@ -110,9 +154,11 @@ export default function AdminPage() {
   return (
     <div className="min-h-screen bg-gray-50">
       <Navbar user={user} title="管理后台" />
+      {toast && <div className="fixed top-16 left-1/2 -translate-x-1/2 bg-gray-800 text-white text-sm px-4 py-2 rounded-full z-50 shadow">{toast}</div>}
+
       <div className="max-w-4xl mx-auto px-4 py-6">
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
-          {[{ label: '总订单', value: stats.totalOrders, color: 'text-blue-600' }, { label: '待处理', value: stats.pendingOrders, color: 'text-yellow-600' }, { label: '今日营收', value: `¥${stats.todayRevenue.toFixed(2)}`, color: 'text-green-600' }, { label: '商品数', value: stats.totalProducts, color: 'text-purple-600' }].map(s => (
+          {[{ label: '总订单', value: stats.totalOrders, color: 'text-blue-600' }, { label: '待处理', value: stats.pendingOrders, color: 'text-yellow-600' }, { label: '今日营收', value: `€${stats.todayRevenue.toFixed(2)}`, color: 'text-green-600' }, { label: '商品数', value: stats.totalProducts, color: 'text-purple-600' }].map(s => (
             <div key={s.label} className="bg-white rounded-xl p-4 shadow-sm">
               <div className={`text-2xl font-bold ${s.color}`}>{s.value}</div>
               <div className="text-gray-400 text-sm mt-1">{s.label}</div>
@@ -120,35 +166,47 @@ export default function AdminPage() {
           ))}
         </div>
 
-        <div className="flex gap-2 mb-4">
-          {(['orders', 'products', 'categories'] as const).map(t => (
+        <div className="flex gap-2 mb-4 flex-wrap">
+          {(['orders', 'products', 'import', 'categories'] as const).map(t => (
             <button key={t} onClick={() => setTab(t)} className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${tab === t ? 'bg-orange-500 text-white' : 'bg-white text-gray-600 hover:bg-gray-100'}`}>
-              {t === 'orders' ? '📋 订单管理' : t === 'products' ? '📦 商品管理' : '🏷️ 分类管理'}
+              {t === 'orders' ? '📋 订单管理' : t === 'products' ? '📦 商品管理' : t === 'import' ? '📥 批量导入' : '🏷️ 分类管理'}
             </button>
           ))}
         </div>
 
         {tab === 'orders' && (
-          <div className="space-y-3">
-            {orders.filter(o => o.status !== 'pending_review').length === 0 && <div className="text-center text-gray-400 py-12">暂无订单</div>}
-            {orders.filter(o => o.status !== 'pending_review').map(order => (
-              <div key={order.id} className="bg-white rounded-xl p-4 shadow-sm">
-                <div className="flex items-center justify-between mb-2">
-                  <div><span className="font-semibold text-gray-800">{order.orderNo}</span><span className="ml-2 text-sm text-gray-400">{order.buyerName}</span></div>
-                  <span className={`text-xs px-2 py-1 rounded-full font-medium ${statusColor[order.status]}`}>{getStatusLabel(order.status)}</span>
-                </div>
-                <div className="text-sm text-gray-500 mb-2">{order.items.map(i => `${i.productName}×${i.quantity}`).join('、')}</div>
-                <div className="flex items-center justify-between">
-                  <div className="flex gap-2">
-                    {statusActions[order.status].map(a => (
-                      <button key={a.next} onClick={() => updateOrderStatus(order.id, a.next)} className="text-xs px-3 py-1 bg-orange-500 text-white rounded-lg hover:bg-orange-600">{a.label}</button>
-                    ))}
+          <div>
+            <div className="flex justify-end mb-3">
+              <button onClick={handleExportAll} disabled={exporting}
+                className="flex items-center gap-2 px-4 py-2 bg-green-500 text-white text-sm rounded-lg hover:bg-green-600 disabled:opacity-60">
+                {exporting ? '导出中…' : '📊 导出全部订单'}
+              </button>
+            </div>
+            <div className="space-y-3">
+              {orders.filter(o => o.status !== 'pending_review').length === 0 && <div className="text-center text-gray-400 py-12">暂无订单</div>}
+              {orders.filter(o => o.status !== 'pending_review').map(order => (
+                <div key={order.id} className="bg-white rounded-xl p-4 shadow-sm">
+                  <div className="flex items-center justify-between mb-2">
+                    <div><span className="font-semibold text-gray-800">{order.orderNo}</span><span className="ml-2 text-sm text-gray-400">{order.buyerName}</span></div>
+                    <span className={`text-xs px-2 py-1 rounded-full font-medium ${statusColor[order.status]}`}>{getStatusLabel(order.status)}</span>
                   </div>
-                  <span className="font-bold text-orange-500">¥{order.totalAmount.toFixed(2)}</span>
+                  <div className="text-sm text-gray-500 mb-2">{order.items.map(i => `${i.productName}×${i.quantity}`).join('、')}</div>
+                  <div className="flex items-center justify-between">
+                    <div className="flex gap-2 flex-wrap">
+                      {statusActions[order.status].map(a => (
+                        <button key={a.next} onClick={() => updateOrderStatus(order.id, a.next)} className="text-xs px-3 py-1 bg-orange-500 text-white rounded-lg hover:bg-orange-600">{a.label}</button>
+                      ))}
+                      <button onClick={() => handleExportSingle(order)} disabled={exporting}
+                        className="text-xs px-3 py-1 bg-blue-500 text-white rounded-lg hover:bg-blue-600 disabled:opacity-60">
+                        导出此单
+                      </button>
+                    </div>
+                    <span className="font-bold text-orange-500">€{order.totalAmount.toFixed(2)}</span>
+                  </div>
+                  {order.remark && <div className="mt-2 text-xs text-gray-400 bg-gray-50 rounded p-2">备注：{order.remark}</div>}
                 </div>
-                {order.remark && <div className="mt-2 text-xs text-gray-400 bg-gray-50 rounded p-2">备注：{order.remark}</div>}
-              </div>
-            ))}
+              ))}
+            </div>
           </div>
         )}
 
@@ -164,7 +222,7 @@ export default function AdminPage() {
                 return (
                   <div key={p.id} className="bg-white rounded-xl p-3 shadow-sm flex items-center gap-3">
                     <div className="w-14 h-14 rounded-lg overflow-hidden bg-orange-50 flex items-center justify-center shrink-0">
-                      {p.image ? <img src={p.image} alt={p.name} className="w-full h-full object-cover" /> : <span className="text-2xl">{productEmoji(p.categoryId)}</span>}
+                      {p.image ? <img src={p.image} alt={p.name} className="w-full h-full object-cover" /> : <span className="text-2xl">📦</span>}
                     </div>
                     <div className="flex-1 min-w-0">
                       <div className="font-medium text-gray-800 truncate">{p.name}</div>
@@ -172,13 +230,61 @@ export default function AdminPage() {
                       {p.barcode && <div className="text-xs text-gray-300">条码:{p.barcode}</div>}
                     </div>
                     <div className="flex items-center gap-3 shrink-0">
-                      <span className="font-bold text-orange-500">¥{p.price.toFixed(2)}</span>
+                      <span className="font-bold text-orange-500">€{p.price.toFixed(2)}</span>
                       <button onClick={() => openEditProduct(p)} className="text-xs text-blue-500 hover:underline">编辑</button>
                       <button onClick={() => deleteProduct(p.id)} className="text-xs text-red-400 hover:underline">删除</button>
                     </div>
                   </div>
                 )
               })}
+            </div>
+          </div>
+        )}
+
+        {tab === 'import' && (
+          <div className="max-w-2xl">
+            <div className="bg-white rounded-xl p-6 shadow-sm mb-4">
+              <h3 className="font-bold text-gray-800 mb-1">批量导入商品</h3>
+              <p className="text-sm text-gray-400 mb-5">先下载模板，填写商品信息，将图片插入到对应行的H列，然后上传。</p>
+
+              <div className="grid grid-cols-2 gap-4 mb-6">
+                <button onClick={handleDownloadTemplate}
+                  className="flex flex-col items-center gap-2 p-5 border-2 border-dashed border-gray-200 rounded-xl hover:border-orange-400 hover:bg-orange-50 transition-colors">
+                  <span className="text-3xl">📋</span>
+                  <span className="text-sm font-medium text-gray-700">下载导入模板</span>
+                  <span className="text-xs text-gray-400">含使用说明和示例</span>
+                </button>
+
+                <button onClick={() => importFileRef.current?.click()} disabled={importing}
+                  className="flex flex-col items-center gap-2 p-5 border-2 border-dashed border-blue-200 rounded-xl hover:border-blue-400 hover:bg-blue-50 transition-colors disabled:opacity-60">
+                  <span className="text-3xl">{importing ? '⏳' : '📥'}</span>
+                  <span className="text-sm font-medium text-gray-700">{importing ? '导入中…' : '上传并导入'}</span>
+                  <span className="text-xs text-gray-400">支持 .xlsx / .xls</span>
+                </button>
+                <input ref={importFileRef} type="file" accept=".xlsx,.xls" className="hidden" onChange={handleImportFile} />
+              </div>
+
+              {importResult && (
+                <div className={`rounded-xl p-4 ${importResult.ok > 0 ? 'bg-green-50' : 'bg-red-50'}`}>
+                  {importResult.ok > 0 && <div className="text-green-700 font-medium mb-2">✅ 成功导入 {importResult.ok} 个商品</div>}
+                  {importResult.errors.length > 0 && (
+                    <div>
+                      <div className="text-red-600 font-medium mb-1">以下行有问题：</div>
+                      {importResult.errors.map((e, i) => <div key={i} className="text-sm text-red-500">• {e}</div>)}
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+
+            <div className="bg-orange-50 rounded-xl p-4 text-sm text-orange-700">
+              <div className="font-medium mb-2">📌 图片导入说明</div>
+              <ol className="list-decimal list-inside space-y-1 text-orange-600">
+                <li>下载模板并用 Excel / WPS 打开</li>
+                <li>填写商品信息（名称、分类、价格等）</li>
+                <li>在每行 H 列：插入 → 图片 → 嵌入到单元格</li>
+                <li>保存后上传文件即可批量导入</li>
+              </ol>
             </div>
           </div>
         )}
@@ -193,6 +299,7 @@ export default function AdminPage() {
               {categories.map(c => (
                 <div key={c.id} className="flex items-center justify-between py-2 border-b border-gray-100 last:border-0">
                   <span className="text-gray-700">{c.name}</span>
+                  <span className="text-xs text-gray-300">{products.filter(p => p.categoryId === c.id).length} 个商品</span>
                 </div>
               ))}
             </div>
@@ -239,7 +346,7 @@ export default function AdminPage() {
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="text-sm text-gray-500 mb-1 block">价格 (¥) *</label>
+                  <label className="text-sm text-gray-500 mb-1 block">价格 (€) *</label>
                   <input type="number" step="0.01" value={form.price} onChange={e => setForm({ ...form, price: e.target.value })} className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm outline-none focus:border-orange-400" />
                 </div>
                 <div>
