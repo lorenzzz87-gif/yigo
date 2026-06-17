@@ -252,14 +252,27 @@ export async function importProductsFromFile(file: File, categories: Category[])
   const results: Omit<Product, 'id'>[] = []
   const errors: string[] = []
 
+  // tl.row is 0-indexed; eachRow rowNum is 1-indexed
+  // data rows start at rowNum=3, so tl.row=2 → rowNum=3 → key = tl.row+1
   const imagesByRow: Record<number, string> = {}
+  function uint8ToBase64(bytes: Uint8Array): string {
+    let binary = ''
+    const chunk = 8192
+    for (let i = 0; i < bytes.length; i += chunk) {
+      binary += String.fromCharCode(...bytes.subarray(i, i + chunk))
+    }
+    return btoa(binary)
+  }
   ;(ws.getImages?.() || []).forEach((img: any) => {
-    const row = Math.floor(img.range.tl.row)
+    const tlRow = Math.floor(img.range.tl.row) // 0-indexed
+    const rowNum1indexed = tlRow + 1            // convert to 1-indexed rowNum
     const imgData = (wb as any).getImage(img.imageId)
-    if (imgData) {
-      const b64 = btoa(String.fromCharCode(...new Uint8Array(imgData.buffer)))
-      const ext = imgData.extension || 'jpeg'
-      imagesByRow[row] = `data:image/${ext};base64,${b64}`
+    if (imgData?.buffer) {
+      try {
+        const b64 = uint8ToBase64(new Uint8Array(imgData.buffer))
+        const ext = imgData.extension || 'jpeg'
+        imagesByRow[rowNum1indexed] = `data:image/${ext};base64,${b64}`
+      } catch { /* skip bad image */ }
     }
   })
 
@@ -272,7 +285,7 @@ export async function importProductsFromFile(file: File, categories: Category[])
     const stockRaw = row.getCell(5).value
     const barcode = (row.getCell(6).text || '').trim()
     const description = (row.getCell(7).text || '').trim()
-    const image = imagesByRow[rowNum - 1] || undefined
+    const image = imagesByRow[rowNum] || undefined
 
     if (!name) return
     if (!categoryRaw) { errors.push(`第${rowNum}行 "${name}"：缺少分类`); return }
