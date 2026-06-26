@@ -59,14 +59,14 @@ function downloadBuffer(buffer: ArrayBuffer, filename: string) {
 
 export async function exportAllOrders(orders: Order[]) {
   const wb = new ExcelJS.Workbook()
-  wb.creator = '友购管理端'
+  wb.creator = 'Yigo管理端'
   wb.created = new Date()
 
   const ws = wb.addWorksheet('所有订单', { views: [{ state: 'frozen', ySplit: 2 }] })
 
   ws.mergeCells('A1:I1')
   const titleCell = ws.getCell('A1')
-  titleCell.value = `友购订单汇总 — 导出时间：${new Date().toLocaleString('zh-CN')}`
+  titleCell.value = `Yigo订单汇总 — 导出时间：${new Date().toLocaleString('zh-CN')}`
   titleCell.font = { bold: true, size: 13, color: { argb: 'FFFFFFFF' } }
   titleCell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF97316' } }
   titleCell.alignment = { vertical: 'middle', horizontal: 'center' }
@@ -119,14 +119,14 @@ export async function exportAllOrders(orders: Order[]) {
 
   const buffer = await wb.xlsx.writeBuffer()
   const date = new Date().toISOString().slice(0, 10)
-  downloadBuffer(buffer, `友购订单汇总_${date}.xlsx`)
+  downloadBuffer(buffer, `Yigo订单汇总_${date}.xlsx`)
 }
 
 // ─── Export: Single Order ──────────────────────────────────────────────────
 
 export async function exportSingleOrder(order: Order, products: Product[]) {
   const wb = new ExcelJS.Workbook()
-  wb.creator = '友购管理端'
+  wb.creator = 'Yigo管理端'
 
   const ws = wb.addWorksheet('订单详情')
   ws.columns = [
@@ -213,7 +213,7 @@ export async function exportProductTemplate(categories: Category[]) {
 
   ws.mergeCells('A1:H1')
   const t = ws.getCell('A1')
-  t.value = '友购商品批量导入模板 — 请勿修改第1、2行格式；图片请直接插入到对应行的H列单元格'
+  t.value = 'Yigo商品批量导入模板 — 请勿修改第1、2行格式；图片请直接插入到对应行的H列单元格'
   t.font = { bold: true, color: { argb: 'FFFFFFFF' } }
   t.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF97316' } }
   t.alignment = { vertical: 'middle', horizontal: 'center' }
@@ -239,7 +239,7 @@ export async function exportProductTemplate(categories: Category[]) {
   categories.forEach(c => catWs.addRow([c.name]))
 
   const buffer = await wb.xlsx.writeBuffer()
-  downloadBuffer(buffer, '友购商品导入模板.xlsx')
+  downloadBuffer(buffer, 'Yigo商品导入模板.xlsx')
 }
 
 // ─── Import: Products from Excel ──────────────────────────────────────────
