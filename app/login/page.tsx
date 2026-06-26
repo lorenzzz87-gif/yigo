@@ -3,6 +3,13 @@ import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { store } from '@/lib/store'
 
+const DEMO_ACCOUNTS = [
+  { label: '管理员', role: 'admin', phone: '13800000001', password: '123456', icon: '👑', color: 'bg-purple-50 border-purple-200 text-purple-700' },
+  { label: '业务员', role: 'salesperson', phone: '13800000004', password: '123456', icon: '💼', color: 'bg-green-50 border-green-200 text-green-700' },
+  { label: '采购商A', role: 'buyer', phone: '13800000002', password: '123456', icon: '🏪', color: 'bg-blue-50 border-blue-200 text-blue-700' },
+  { label: '采购商B', role: 'buyer', phone: '13800000003', password: '123456', icon: '🏪', color: 'bg-blue-50 border-blue-200 text-blue-700' },
+]
+
 export default function LoginPage() {
   const router = useRouter()
   const [tab, setTab] = useState<'login' | 'register'>('login')
@@ -86,6 +93,23 @@ export default function LoginPage() {
             管理员/业务员账号请联系平台
           </p>
         )}
+
+        {/* 测试快速入口 */}
+        <div className="mt-6 pt-5 border-t border-gray-100">
+          <p className="text-xs text-gray-300 text-center mb-3">— 测试快速登录 —</p>
+          <div className="grid grid-cols-2 gap-2">
+            {DEMO_ACCOUNTS.map(acc => (
+              <button key={acc.phone} onClick={async () => {
+                const user = await store.loginByPhone(acc.phone, acc.password)
+                if (user) { store.setCurrentUser(user); router.push(`/${user.role}`) }
+              }}
+                className={`flex items-center gap-2 px-3 py-2 rounded-xl border text-sm font-medium transition-all hover:opacity-80 ${acc.color}`}>
+                <span>{acc.icon}</span>
+                <span>{acc.label}</span>
+              </button>
+            ))}
+          </div>
+        </div>
       </div>
     </div>
   )
