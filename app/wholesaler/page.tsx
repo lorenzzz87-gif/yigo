@@ -1,7 +1,7 @@
 'use client'
 import { useEffect, useState, useRef } from 'react'
 import { useRouter } from 'next/navigation'
-import { store, User, Product, Order, Category, getStatusLabel } from '@/lib/store'
+import { store, User, Product, Order, Category, Invite, getStatusLabel } from '@/lib/store'
 import { exportAllOrders, exportSingleOrder, exportProductTemplate, importProductsFromFile } from '@/lib/excel'
 import Navbar from '@/components/navbar'
 
@@ -9,7 +9,10 @@ export default function WholesalerPage() {
   const router = useRouter()
   const [user, setUser] = useState<User | null>(null)
   const [wid, setWid] = useState<string>('')
-  const [tab, setTab] = useState<'orders' | 'products' | 'import' | 'categories'>('orders')
+  const [tab, setTab] = useState<'orders' | 'products' | 'import' | 'invites' | 'categories'>('orders')
+  const [invites, setInvites] = useState<Invite[]>([])
+  const [newInvite, setNewInvite] = useState<Invite | null>(null)
+  const [generating, setGenerating] = useState(false)
   const [orders, setOrders] = useState<Order[]>([])
   const [products, setProducts] = useState<Product[]>([])
   const [categories, setCategories] = useState<Category[]>([])
@@ -36,11 +39,25 @@ export default function WholesalerPage() {
   }, [router])
 
   async function refreshData(w: string) {
-    const [o, p, c] = await Promise.all([store.getOrders(w), store.getProducts(w), store.getCategories(w)])
-    setOrders(o); setProducts(p); setCategories(c)
+    const [o, p, c, inv] = await Promise.all([store.getOrders(w), store.getProducts(w), store.getCategories(w), store.getInvites(w)])
+    setOrders(o); setProducts(p); setCategories(c); setInvites(inv)
   }
 
   function showToast(msg: string) { setToast(msg); setTimeout(() => setToast(''), 3000) }
+
+  async function generateInvite() {
+    setGenerating(true)
+    const inv = await store.createInvite(wid)
+    setNewInvite(inv)
+    await refreshData(wid)
+    setGenerating(false)
+  }
+
+  function inviteStatus(inv: Invite): { label: string; color: string } {
+    if (inv.used) return { label: '已使用', color: 'bg-gray-100 text-gray-500' }
+    if (new Date(inv.expiresAt).getTime() < Date.now()) return { label: '已过期', color: 'bg-red-100 text-red-600' }
+    return { label: '有效', color: 'bg-green-100 text-green-700' }
+  }
 
   function openAddProduct() {
     setEditProduct(null)
@@ -169,9 +186,9 @@ export default function WholesalerPage() {
         </div>
 
         <div className="flex gap-2 mb-4 flex-wrap">
-          {(['orders', 'products', 'import', 'categories'] as const).map(t => (
+          {(['orders', 'products', 'import', 'invites', 'categories'] as const).map(t => (
             <button key={t} onClick={() => setTab(t)} className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${tab === t ? 'bg-orange-500 text-white' : 'bg-white text-gray-600 hover:bg-gray-100'}`}>
-              {t === 'orders' ? '📋 订单管理' : t === 'products' ? '📦 商品管理' : t === 'import' ? '📥 批量导入' : '🏷️ 分类管理'}
+              {t === 'orders' ? '📋 订单管理' : t === 'products' ? '📦 商品管理' : t === 'import' ? '📥 批量导入' : t === 'invites' ? '🎫 客户邀请' : '🏷️ 分类管理'}
             </button>
           ))}
         </div>
@@ -287,6 +304,62 @@ export default function WholesalerPage() {
                 <li>在每行 H 列：插入 → 图片 → 嵌入到单元格</li>
                 <li>保存后上传文件即可批量导入</li>
               </ol>
+            </div>
+          </div>
+        )}
+
+        {tab === 'invites' && (
+          <div className="max-w-2xl">
+            <div className="bg-white rounded-xl p-6 shadow-sm mb-4">
+              <h3 className="font-bold text-gray-800 mb-1">邀请新商家</h3>
+              <p className="text-sm text-gray-400 mb-4">生成「商家号 + 临时密码」发给客户，客户 <b>2天内</b> 注册即成为你的客户，可浏览你的商品下单。</p>
+              <button onClick={generateInvite} disabled={generating}
+                className="px-5 py-2.5 bg-orange-500 text-white rounded-xl text-sm font-medium hover:bg-orange-600 disabled:opacity-60">
+                {generating ? '生成中…' : '+ 生成邀请码'}
+              </button>
+
+              {newInvite && (
+                <div className="mt-4 bg-orange-50 border border-orange-200 rounded-xl p-4">
+                  <div className="text-xs text-orange-600 mb-2">✅ 新邀请已生成，发给客户：</div>
+                  <div className="flex items-center justify-between bg-white rounded-lg px-4 py-2 mb-2">
+                    <span className="text-sm text-gray-500">商家号</span>
+                    <span className="font-bold text-gray-800 text-lg tracking-wider">{newInvite.code}</span>
+                  </div>
+                  <div className="flex items-center justify-between bg-white rounded-lg px-4 py-2 mb-3">
+                    <span className="text-sm text-gray-500">临时密码</span>
+                    <span className="font-bold text-gray-800 text-lg tracking-wider">{newInvite.tempPassword}</span>
+                  </div>
+                  <button
+                    onClick={() => { navigator.clipboard?.writeText(`Yigo易购 商家号：${newInvite.code} 临时密码：${newInvite.tempPassword}（2天内有效，请在登录页"商家注册"输入）`); showToast('已复制邀请信息') }}
+                    className="w-full py-2 bg-orange-500 text-white rounded-lg text-sm font-medium hover:bg-orange-600">
+                    📋 复制邀请信息
+                  </button>
+                  <div className="text-xs text-orange-500 mt-2 text-center">有效期至 {new Date(newInvite.expiresAt).toLocaleString('zh-CN')}</div>
+                </div>
+              )}
+            </div>
+
+            <div className="bg-white rounded-xl p-4 shadow-sm">
+              <div className="text-sm font-medium text-gray-600 mb-3">已生成的邀请（{invites.length}）</div>
+              {invites.length === 0 ? (
+                <div className="text-center text-gray-400 py-8 text-sm">还没有邀请，点上方按钮生成</div>
+              ) : (
+                <div className="space-y-2">
+                  {invites.map(inv => {
+                    const st = inviteStatus(inv)
+                    return (
+                      <div key={inv.code} className="flex items-center justify-between py-2 border-b border-gray-100 last:border-0">
+                        <div>
+                          <span className="font-medium text-gray-800 tracking-wider">{inv.code}</span>
+                          <span className="text-gray-300 mx-2">·</span>
+                          <span className="text-sm text-gray-500">密码 {inv.tempPassword}</span>
+                        </div>
+                        <span className={`text-xs px-2 py-1 rounded-full font-medium ${st.color}`}>{st.label}</span>
+                      </div>
+                    )
+                  })}
+                </div>
+              )}
             </div>
           </div>
         )}

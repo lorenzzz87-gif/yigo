@@ -19,6 +19,16 @@ export interface Wholesaler {
   createdAt: string
 }
 
+export interface Invite {
+  code: string
+  tempPassword: string
+  wholesalerId: string
+  expiresAt: string
+  used: boolean
+  usedBy?: string
+  createdAt: string
+}
+
 export interface Category {
   id: string
   name: string
@@ -129,13 +139,33 @@ export const store = {
     if (!data) return null
     return toUser(data)
   },
-  async registerBuyer(name: string, phone: string, password: string, wholesalerId: string): Promise<{ ok: boolean; msg: string }> {
+  async registerBuyer(name: string, phone: string, password: string, code: string, tempPassword: string): Promise<{ ok: boolean; msg: string }> {
+    const { data: inv } = await supabase.from('invites').select('*').eq('code', code.trim()).maybeSingle()
+    if (!inv) return { ok: false, msg: '商家号不存在，请向批发商索取' }
+    if (inv.temp_password !== tempPassword.trim()) return { ok: false, msg: '临时密码错误' }
+    if (inv.used) return { ok: false, msg: '该商家号已被使用，请向批发商索取新的' }
+    if (new Date(inv.expires_at).getTime() < Date.now()) return { ok: false, msg: '商家号已过期（超过2天），请向批发商索取新的' }
     const { data: existing } = await supabase.from('users').select('id').eq('phone', phone.trim()).maybeSingle()
     if (existing) return { ok: false, msg: '该手机号已注册' }
     const id = `u${Date.now()}`
-    const { error } = await supabase.from('users').insert({ id, name, phone: phone.trim(), password, role: 'buyer', wholesaler_id: wholesalerId })
+    const { error } = await supabase.from('users').insert({ id, name, phone: phone.trim(), password, role: 'buyer', wholesaler_id: inv.wholesaler_id })
     if (error) return { ok: false, msg: '注册失败，请重试' }
+    await supabase.from('invites').update({ used: true, used_by: id }).eq('code', inv.code)
     return { ok: true, msg: '' }
+  },
+
+  // Invites (merchant access codes — issued by wholesaler, valid 2 days)
+  async createInvite(wholesalerId: string): Promise<Invite> {
+    const code = 'M' + Math.floor(100000 + Math.random() * 900000)
+    const tempPassword = String(Math.floor(1000 + Math.random() * 9000))
+    const expiresAt = new Date(Date.now() + 2 * 24 * 3600 * 1000).toISOString()
+    const row = { code, temp_password: tempPassword, wholesaler_id: wholesalerId, expires_at: expiresAt, used: false, used_by: null }
+    await supabase.from('invites').insert(row)
+    return { code, tempPassword, wholesalerId, expiresAt, used: false, createdAt: new Date().toISOString() }
+  },
+  async getInvites(wholesalerId: string): Promise<Invite[]> {
+    const { data } = await supabase.from('invites').select('*').eq('wholesaler_id', wholesalerId).order('created_at', { ascending: false })
+    return (data || []).map(r => ({ code: r.code, tempPassword: r.temp_password, wholesalerId: r.wholesaler_id, expiresAt: r.expires_at, used: r.used, usedBy: r.used_by || undefined, createdAt: r.created_at }))
   },
 
   // Wholesalers (tenants — managed by platform admin)

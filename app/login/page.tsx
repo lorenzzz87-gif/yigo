@@ -1,7 +1,7 @@
 'use client'
-import { useState, useEffect } from 'react'
+import { useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { store, Wholesaler } from '@/lib/store'
+import { store } from '@/lib/store'
 
 const DEMO_ACCOUNTS = [
   { label: '平台管理员', role: 'admin', phone: '13800000001', password: '123456', icon: '👑', color: 'bg-purple-50 border-purple-200 text-purple-700' },
@@ -18,19 +18,11 @@ export default function LoginPage() {
   const [phone, setPhone] = useState('+39 ')
   const [password, setPassword] = useState('')
   const [name, setName] = useState('')
-  const [wholesalers, setWholesalers] = useState<Wholesaler[]>([])
-  const [selectedWholesaler, setSelectedWholesaler] = useState('')
+  const [inviteCode, setInviteCode] = useState('')
+  const [inviteTempPwd, setInviteTempPwd] = useState('')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [success, setSuccess] = useState('')
-
-  useEffect(() => {
-    store.getWholesalers().then(ws => {
-      const active = ws.filter(w => w.status === 'active')
-      setWholesalers(active)
-      if (active[0]) setSelectedWholesaler(active[0].id)
-    })
-  }, [])
 
   async function handleLogin() {
     if (!phone || !password) { setError('请填写手机号和密码'); return }
@@ -43,17 +35,17 @@ export default function LoginPage() {
   }
 
   async function handleRegister() {
-    if (!name || !phone || !password) { setError('请填写所有字段'); return }
+    if (!name || !phone || !password) { setError('请填写姓名、手机号、密码'); return }
     if (phone.trim().length < 6) { setError('请输入正确的手机号'); return }
     if (password.length < 6) { setError('密码至少6位'); return }
-    if (!selectedWholesaler) { setError('请选择供货批发商'); return }
+    if (!inviteCode || !inviteTempPwd) { setError('请输入批发商给你的商家号和临时密码'); return }
     setLoading(true); setError('')
-    const result = await store.registerBuyer(name, phone, password, selectedWholesaler)
+    const result = await store.registerBuyer(name, phone, password, inviteCode, inviteTempPwd)
     setLoading(false)
     if (!result.ok) { setError(result.msg); return }
-    setSuccess('注册成功！请登录')
+    setSuccess('订阅成功！已成为该批发商客户，请登录')
     setTab('login')
-    setName('')
+    setName(''); setInviteCode(''); setInviteTempPwd('')
   }
 
   return (
@@ -82,15 +74,14 @@ export default function LoginPage() {
               <div>
                 <label className="text-sm text-gray-500 block mb-1">姓名 / 店铺名</label>
                 <input value={name} onChange={e => setName(e.target.value)} placeholder="请输入姓名"
-                  className="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm outline-none focus:border-orange-400" />
+                  className="w-full border border-gray-200 rounded-xl px-4 py-3 text-base outline-none focus:border-orange-400" />
               </div>
-              <div>
-                <label className="text-sm text-gray-500 block mb-1">供货批发商</label>
-                <select value={selectedWholesaler} onChange={e => setSelectedWholesaler(e.target.value)}
-                  className="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm outline-none focus:border-orange-400 bg-white">
-                  {wholesalers.length === 0 && <option value="">暂无可选批发商</option>}
-                  {wholesalers.map(w => <option key={w.id} value={w.id}>{w.name}</option>)}
-                </select>
+              <div className="bg-orange-50 rounded-xl p-3 space-y-2">
+                <div className="text-xs text-orange-600">⬇ 向批发商索取的商家号 + 临时密码（2天内有效）</div>
+                <input value={inviteCode} onChange={e => setInviteCode(e.target.value)} placeholder="商家号，如 M123456"
+                  className="w-full border border-orange-200 rounded-xl px-4 py-3 text-base outline-none focus:border-orange-400 bg-white" />
+                <input value={inviteTempPwd} onChange={e => setInviteTempPwd(e.target.value)} placeholder="临时密码"
+                  className="w-full border border-orange-200 rounded-xl px-4 py-3 text-base outline-none focus:border-orange-400 bg-white" />
               </div>
             </>
           )}
