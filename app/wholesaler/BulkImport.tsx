@@ -2,6 +2,7 @@
 import { useState, useRef } from 'react'
 import ExcelJS from 'exceljs'
 import { store, Category } from '@/lib/store'
+import { exportProductTemplate } from '@/lib/excel'
 import { compressImage, extractZip, barcodeKey } from '@/lib/imageUtils'
 
 interface ParsedRow {
@@ -184,11 +185,15 @@ export default function BulkImport({ wholesalerId, categories, onDone }: Props) 
       {step === 'upload' && (
         <div className="space-y-4">
           <div className="bg-white rounded-xl p-5 shadow-sm">
-            <div className="text-sm font-medium text-gray-700 mb-3">① 上传商品表（Excel）</div>
+            <div className="text-sm font-medium text-gray-700 mb-3">① 下载模板 / 上传商品表（Excel）</div>
             <p className="text-xs text-gray-400 mb-3">第6列填条码，系统用条码匹配图片。无条码填唯一货号。</p>
-            <div className="flex gap-3">
+            <div className="flex gap-3 flex-wrap">
+              <button onClick={async () => { try { await exportProductTemplate(categories) } catch(e:any) { alert('下载失败:' + e.message) } }}
+                className="px-4 py-2 border border-orange-400 text-orange-500 rounded-lg text-sm font-medium hover:bg-orange-50">
+                📋 下载导入模板
+              </button>
               <button onClick={() => excelRef.current?.click()} className="px-4 py-2 bg-orange-500 text-white rounded-lg text-sm font-medium hover:bg-orange-600">
-                📋 选择 Excel 文件
+                📤 选择 Excel 文件
               </button>
               {excelFile && <span className="text-sm text-green-600 flex items-center">✓ {excelFile.name}（{rows.length} 条商品）</span>}
             </div>
