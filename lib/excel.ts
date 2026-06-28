@@ -200,43 +200,66 @@ export async function exportSingleOrder(order: Order, products: Product[]) {
 
 // ─── Export: Product Import Template ──────────────────────────────────────
 
-export async function exportProductTemplate(categories: Category[]) {
+export async function exportProductTemplate(_categories: Category[]) {
   const wb = new ExcelJS.Workbook()
   const ws = wb.addWorksheet('商品导入', { views: [{ state: 'frozen', ySplit: 2 }] })
 
+  // 分类列已移除 — 分类由 ZIP 图片文件夹名称决定
   ws.columns = [
-    { key: 'name', width: 24 }, { key: 'category', width: 16 },
-    { key: 'price', width: 12 }, { key: 'unit', width: 10 },
-    { key: 'stock', width: 10 }, { key: 'barcode', width: 18 },
-    { key: 'desc', width: 28 }, { key: 'image', width: 20 },
+    { key: 'name',    width: 28 },
+    { key: 'price',   width: 12 },
+    { key: 'unit',    width: 10 },
+    { key: 'stock',   width: 10 },
+    { key: 'barcode', width: 18 },
+    { key: 'desc',    width: 32 },
   ]
 
-  ws.mergeCells('A1:H1')
+  ws.mergeCells('A1:F1')
   const t = ws.getCell('A1')
-  t.value = 'Yigo商品批量导入模板 — 请勿修改第1、2行格式；图片请直接插入到对应行的H列单元格'
+  t.value = 'Yigo 商品导入模板 — 分类请用 ZIP 文件夹名称区分，条码列必填（用于匹配图片）'
   t.font = { bold: true, color: { argb: 'FFFFFFFF' } }
   t.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF97316' } }
   t.alignment = { vertical: 'middle', horizontal: 'center' }
   ws.getRow(1).height = 28
 
-  const hr = ws.addRow(['商品名称*', '分类*', '价格*', '单位*', '库存', '条形码', '描述', '图片(插入图片到此列)'])
+  const hr = ws.addRow(['商品名称*', '价格(€)*', '单位*', '库存', '条码*', '描述'])
   styleHeader(hr, 'FF374151')
 
-  const catName = categories[0]?.name || '饮料'
   ;[
-    ['可乐 330ml', catName, 1.5, '瓶', 100, '6901028001', '经典口味', ''],
-    ['矿泉水 500ml', catName, 0.8, '瓶', 200, '6901028002', '天然矿泉水', ''],
+    ['可口可乐 330ml', 0.55, '罐', 500, '6901028001', '经典口味'],
+    ['矿泉水 500ml',   0.30, '瓶', 800, '6901028002', ''],
   ].forEach(s => {
     const row = ws.addRow(s)
-    row.getCell(3).numFmt = '0.00'
-    row.height = 60
+    row.getCell(2).numFmt = '€0.00'
+    row.height = 22
     row.eachCell(cell => styleCell(cell))
   })
 
-  const catWs = wb.addWorksheet('分类参考')
-  catWs.addRow(['分类名称'])
-  styleHeader(catWs.getRow(1), 'FF374151')
-  categories.forEach(c => catWs.addRow([c.name]))
+  // 说明 sheet
+  const infoWs = wb.addWorksheet('使用说明')
+  const infoRows = [
+    ['Yigo 批量导入说明'],
+    [''],
+    ['Excel 列说明（共6列）:'],
+    ['A - 商品名称（必填）'],
+    ['B - 价格，单位欧元（必填）'],
+    ['C - 单位，如 瓶/罐/箱/kg（必填）'],
+    ['D - 库存数量'],
+    ['E - 条码（必填，图片文件名需与此一致）'],
+    ['F - 商品描述'],
+    [''],
+    ['图片 ZIP 说明:'],
+    ['• 用文件夹名作为分类，如：饮料/6901028001.png'],
+    ['• 不在文件夹里的图片：无分类'],
+    ['• 已有的分类名直接用；新分类名系统自动创建'],
+    ['• 支持 jpg / png / webp 格式'],
+  ]
+  infoRows.forEach((r, i) => {
+    const row = infoWs.addRow(r)
+    if (i === 0) row.getCell(1).font = { bold: true, size: 13, color: { argb: 'FFF97316' } }
+    if (i === 2 || i === 11) row.getCell(1).font = { bold: true }
+  })
+  infoWs.getColumn(1).width = 50
 
   const buffer = await wb.xlsx.writeBuffer()
   downloadBuffer(buffer, 'Yigo商品导入模板.xlsx')
