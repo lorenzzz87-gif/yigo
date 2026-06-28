@@ -135,7 +135,7 @@ export async function exportSingleOrder(order: Order, products: Product[]) {
 
   ws.mergeCells('A1:F1')
   const t = ws.getCell('A1')
-  t.value = '友 购 订 单'
+  t.value = 'Yigo 易购 · 订单'
   t.font = { bold: true, size: 16, color: { argb: 'FFFFFFFF' } }
   t.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF97316' } }
   t.alignment = { vertical: 'middle', horizontal: 'center' }

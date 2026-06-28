@@ -1,5 +1,5 @@
 'use client'
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { store } from '@/lib/store'
 
@@ -13,7 +13,13 @@ const DEMO_ACCOUNTS = [
 
 export default function LoginPage() {
   const router = useRouter()
+  const [roleHint, setRoleHint] = useState<string | null>(null)
   const [tab, setTab] = useState<'login' | 'register'>('login')
+
+  useEffect(() => {
+    const p = new URLSearchParams(window.location.search).get('role')
+    if (p) setRoleHint(p)
+  }, [])
   const [phone, setPhone] = useState('+39 ')
   const [password, setPassword] = useState('')
   const [name, setName] = useState('')
@@ -24,7 +30,10 @@ export default function LoginPage() {
   const [success, setSuccess] = useState('')
 
   function destFor(role: string) {
-    // Buyers on the b2b.* subdomain or a desktop screen → Italian B2B portal; phones → mobile portal
+    // role hint from entry page takes priority
+    if (roleHint === 'buyer' && role === 'buyer') return '/b2b'
+    if (roleHint === 'wholesaler' && role === 'wholesaler') return '/wholesaler'
+    // b2b.* subdomain or desktop → B2B portal for buyers
     if (role === 'buyer' && typeof window !== 'undefined') {
       const isB2BHost = window.location.hostname.startsWith('b2b.')
       if (isB2BHost || window.innerWidth >= 1024) return '/b2b'
@@ -61,7 +70,10 @@ export default function LoginPage() {
       <div className="bg-white rounded-2xl shadow-lg p-8 w-full max-w-sm">
         <div className="text-center mb-6">
           <img src="/logo.svg" alt="Yigo 易购" className="h-16 w-auto mx-auto mb-2" />
-          <div className="text-gray-400 text-sm">意大利华人B2B订货平台</div>
+          {roleHint === 'buyer' && <div className="text-sm font-medium text-orange-500">🏪 Accesso acquirenti · 商家登录</div>}
+          {roleHint === 'wholesaler' && <div className="text-sm font-medium text-amber-600">🏬 Accesso fornitori · 批发商登录</div>}
+          {!roleHint && <div className="text-gray-400 text-sm">意大利华人B2B订货平台</div>}
+          {roleHint && <button onClick={() => router.push('/entry')} className="text-xs text-gray-300 mt-1 hover:text-gray-500">← 返回选择身份</button>}
         </div>
 
         <div className="flex bg-gray-100 rounded-xl p-1 mb-6">
