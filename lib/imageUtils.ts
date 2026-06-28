@@ -37,7 +37,7 @@ export async function extractZip(file: File): Promise<Map<string, Blob>> {
   const IMAGE_EXT = /\.(jpe?g|png|webp|gif|bmp)$/i
   await Promise.all(
     Object.values(zip.files)
-      .filter(f => !f.dir && IMAGE_EXT.test(f.name))
+      .filter(f => !f.dir && IMAGE_EXT.test(f.name) && !f.name.split('/').pop()!.startsWith('._'))
       .map(async f => {
         const blob = await f.async('blob')
         const basename = f.name.split('/').pop()!.toLowerCase()
