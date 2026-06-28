@@ -34,7 +34,7 @@ export default function EntryPage() {
 
         {/* Buyer */}
         <button
-          onClick={() => router.push('/login?role=buyer')}
+          onClick={() => router.push('/b2b-login?role=buyer')}
           className="group bg-white rounded-2xl p-8 shadow-md hover:shadow-xl border-2 border-transparent hover:border-orange-400 transition-all text-left"
         >
           <div className="text-5xl mb-5">🏪</div>
@@ -50,7 +50,7 @@ export default function EntryPage() {
 
         {/* Wholesaler */}
         <button
-          onClick={() => router.push('/login?role=wholesaler')}
+          onClick={() => router.push('/b2b-login?role=wholesaler')}
           className="group bg-white rounded-2xl p-8 shadow-md hover:shadow-xl border-2 border-transparent hover:border-amber-400 transition-all text-left"
         >
           <div className="text-5xl mb-5">🏬</div>
