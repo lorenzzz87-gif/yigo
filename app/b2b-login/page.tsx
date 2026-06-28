@@ -149,7 +149,7 @@ export default function B2BLoginPage() {
                   <label className="text-xs font-medium text-gray-500 block mb-1.5">姓名 / Nome negozio</label>
                   <input value={name} onChange={e => setName(e.target.value)}
                     placeholder="您的姓名或店铺名"
-                    className={`w-full border border-gray-200 rounded-xl px-4 py-3 text-sm outline-none focus:ring-2 ${accentBorder} transition`} />
+                    className={`w-full border border-gray-200 rounded-xl px-4 py-3 text-sm outline-none focus:ring-2 ${accentBorder} transition text-gray-900 placeholder:text-gray-300`} />
                 </div>
               )}
 
@@ -169,12 +169,12 @@ export default function B2BLoginPage() {
                     <input value={email} onChange={e => setEmail(e.target.value)} type="email"
                       placeholder="name@example.com"
                       onKeyDown={e => e.key === 'Enter' && handleLogin()}
-                      className={`w-full border border-gray-200 rounded-xl px-4 py-3 text-sm outline-none focus:ring-2 ${accentBorder} transition`} />
+                      className={`w-full border border-gray-200 rounded-xl px-4 py-3 text-sm outline-none focus:ring-2 ${accentBorder} transition text-gray-900 placeholder:text-gray-300`} />
                   ) : (
                     <input value={phone} onChange={e => setPhone(e.target.value)} type="tel"
                       placeholder="+39 ..."
                       onKeyDown={e => e.key === 'Enter' && handleLogin()}
-                      className={`w-full border border-gray-200 rounded-xl px-4 py-3 text-sm outline-none focus:ring-2 ${accentBorder} transition`} />
+                      className={`w-full border border-gray-200 rounded-xl px-4 py-3 text-sm outline-none focus:ring-2 ${accentBorder} transition text-gray-900 placeholder:text-gray-300`} />
                   )}
                 </div>
               )}
@@ -186,13 +186,13 @@ export default function B2BLoginPage() {
                     <label className="text-xs font-medium text-gray-500 block mb-1.5">Email · 邮箱 <span className="text-gray-300">(推荐)</span></label>
                     <input value={email} onChange={e => setEmail(e.target.value)} type="email"
                       placeholder="name@example.com"
-                      className={`w-full border border-gray-200 rounded-xl px-4 py-3 text-sm outline-none focus:ring-2 ${accentBorder} transition`} />
+                      className={`w-full border border-gray-200 rounded-xl px-4 py-3 text-sm outline-none focus:ring-2 ${accentBorder} transition text-gray-900 placeholder:text-gray-300`} />
                   </div>
                   <div>
                     <label className="text-xs font-medium text-gray-500 block mb-1.5">Telefono · 手机号 <span className="text-gray-300">(选填)</span></label>
                     <input value={phone} onChange={e => setPhone(e.target.value)} type="tel"
                       placeholder="+39 ..."
-                      className={`w-full border border-gray-200 rounded-xl px-4 py-3 text-sm outline-none focus:ring-2 ${accentBorder} transition`} />
+                      className={`w-full border border-gray-200 rounded-xl px-4 py-3 text-sm outline-none focus:ring-2 ${accentBorder} transition text-gray-900 placeholder:text-gray-300`} />
                   </div>
                 </>
               )}
@@ -202,7 +202,7 @@ export default function B2BLoginPage() {
                 <input value={password} onChange={e => setPassword(e.target.value)} type="password"
                   placeholder={mode === 'register' ? '至少6位' : '请输入密码'}
                   onKeyDown={e => e.key === 'Enter' && mode === 'login' && handleLogin()}
-                  className={`w-full border border-gray-200 rounded-xl px-4 py-3 text-sm outline-none focus:ring-2 ${accentBorder} transition`} />
+                  className={`w-full border border-gray-200 rounded-xl px-4 py-3 text-sm outline-none focus:ring-2 ${accentBorder} transition text-gray-900 placeholder:text-gray-300`} />
               </div>
 
               {mode === 'register' && (
