@@ -2,7 +2,8 @@
 import { useEffect, useState, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import { store, User, Product, Order, Category, Invite, getStatusLabel } from '@/lib/store'
-import { exportAllOrders, exportSingleOrder, exportProductTemplate, importProductsFromFile } from '@/lib/excel'
+import { exportAllOrders, exportSingleOrder } from '@/lib/excel'
+import BulkImport from './BulkImport'
 import Navbar from '@/components/navbar'
 
 export default function WholesalerPage() {
@@ -24,11 +25,8 @@ export default function WholesalerPage() {
   const [search, setSearch] = useState('')
   const [saving, setSaving] = useState(false)
   const [exporting, setExporting] = useState(false)
-  const [importing, setImporting] = useState(false)
-  const [importResult, setImportResult] = useState<{ ok: number; errors: string[] } | null>(null)
   const [toast, setToast] = useState('')
   const fileInputRef = useRef<HTMLInputElement>(null)
-  const importFileRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
     const u = store.getCurrentUser()
@@ -122,28 +120,6 @@ export default function WholesalerPage() {
       showToast('导出成功！')
     } catch (e: any) { showToast('导出失败: ' + e.message) }
     setExporting(false)
-  }
-
-  async function handleDownloadTemplate() {
-    try { await exportProductTemplate(categories); showToast('模板已下载！') }
-    catch (e: any) { showToast('失败: ' + e.message) }
-  }
-
-  async function handleImportFile(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0]; if (!file) return
-    setImporting(true); setImportResult(null)
-    try {
-      const { products: parsed, errors } = await importProductsFromFile(file, categories)
-      let ok = 0, failed: string[] = []
-      for (const p of parsed) {
-        try { await store.addProduct(p, wid); ok++ }
-        catch (err: any) { failed.push(`${p.name}: ${err.message}`) }
-      }
-      setImportResult({ ok, errors: [...errors, ...failed] })
-      if (ok > 0) await refreshData(wid)
-    } catch (e: any) { showToast('导入失败: ' + e.message) }
-    setImporting(false)
-    e.target.value = ''
   }
 
   const filteredProducts = products.filter(p => p.name.includes(search) || p.barcode?.includes(search))
@@ -261,51 +237,11 @@ export default function WholesalerPage() {
         )}
 
         {tab === 'import' && (
-          <div className="max-w-2xl">
-            <div className="bg-white rounded-xl p-6 shadow-sm mb-4">
-              <h3 className="font-bold text-gray-800 mb-1">批量导入商品</h3>
-              <p className="text-sm text-gray-400 mb-5">先下载模板，填写商品信息，将图片插入到对应行的H列，然后上传。</p>
-
-              <div className="grid grid-cols-2 gap-4 mb-6">
-                <button onClick={handleDownloadTemplate}
-                  className="flex flex-col items-center gap-2 p-5 border-2 border-dashed border-gray-200 rounded-xl hover:border-orange-400 hover:bg-orange-50 transition-colors">
-                  <span className="text-3xl">📋</span>
-                  <span className="text-sm font-medium text-gray-700">下载导入模板</span>
-                  <span className="text-xs text-gray-400">含使用说明和示例</span>
-                </button>
-
-                <button onClick={() => importFileRef.current?.click()} disabled={importing}
-                  className="flex flex-col items-center gap-2 p-5 border-2 border-dashed border-blue-200 rounded-xl hover:border-blue-400 hover:bg-blue-50 transition-colors disabled:opacity-60">
-                  <span className="text-3xl">{importing ? '⏳' : '📥'}</span>
-                  <span className="text-sm font-medium text-gray-700">{importing ? '导入中…' : '上传并导入'}</span>
-                  <span className="text-xs text-gray-400">支持 .xlsx / .xls</span>
-                </button>
-                <input ref={importFileRef} type="file" accept=".xlsx,.xls" className="hidden" onChange={handleImportFile} />
-              </div>
-
-              {importResult && (
-                <div className={`rounded-xl p-4 ${importResult.ok > 0 ? 'bg-green-50' : 'bg-red-50'}`}>
-                  {importResult.ok > 0 && <div className="text-green-700 font-medium mb-2">✅ 成功导入 {importResult.ok} 个商品</div>}
-                  {importResult.errors.length > 0 && (
-                    <div>
-                      <div className="text-red-600 font-medium mb-1">以下行有问题：</div>
-                      {importResult.errors.map((e, i) => <div key={i} className="text-sm text-red-500">• {e}</div>)}
-                    </div>
-                  )}
-                </div>
-              )}
-            </div>
-
-            <div className="bg-orange-50 rounded-xl p-4 text-sm text-orange-700">
-              <div className="font-medium mb-2">📌 图片导入说明</div>
-              <ol className="list-decimal list-inside space-y-1 text-orange-600">
-                <li>下载模板并用 Excel / WPS 打开</li>
-                <li>填写商品信息（名称、分类、价格等）</li>
-                <li>在每行 H 列：插入 → 图片 → 嵌入到单元格</li>
-                <li>保存后上传文件即可批量导入</li>
-              </ol>
-            </div>
-          </div>
+          <BulkImport
+            wholesalerId={wid}
+            categories={categories}
+            onDone={() => { setTab('products'); refreshData(wid) }}
+          />
         )}
 
         {tab === 'invites' && (

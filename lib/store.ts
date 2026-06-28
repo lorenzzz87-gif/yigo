@@ -154,6 +154,16 @@ export const store = {
     return { ok: true, msg: '' }
   },
 
+  // Image upload to Supabase Storage (returns public URL)
+  async uploadProductImage(wholesalerId: string, barcode: string, blob: Blob): Promise<string> {
+    const ext = blob.type === 'image/webp' ? 'webp' : 'jpg'
+    const path = `${wholesalerId}/${barcode}_${Date.now()}.${ext}`
+    const { error } = await supabase.storage.from('product-images').upload(path, blob, { upsert: true, contentType: blob.type })
+    if (error) throw new Error('图片上传失败: ' + error.message)
+    const { data } = supabase.storage.from('product-images').getPublicUrl(path)
+    return data.publicUrl
+  },
+
   // Invites (merchant access codes — issued by wholesaler, valid 2 days)
   async createInvite(wholesalerId: string): Promise<Invite> {
     const code = 'M' + Math.floor(100000 + Math.random() * 900000)
