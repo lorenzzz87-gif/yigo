@@ -1,4 +1,4 @@
-// Compress image to 1200px WebP at 85% quality using canvas
+// Compress image to 1200px WebP at 85% quality; fallback to JPEG if WebP fails
 export async function compressImage(blob: Blob): Promise<Blob> {
   return new Promise((resolve, reject) => {
     const url = URL.createObjectURL(blob)
@@ -15,9 +15,16 @@ export async function compressImage(blob: Blob): Promise<Blob> {
       canvas.width = width; canvas.height = height
       const ctx = canvas.getContext('2d')!
       ctx.drawImage(img, 0, 0, width, height)
-      canvas.toBlob(b => b ? resolve(b) : reject(new Error('压缩失败')), 'image/webp', 0.85)
+      // try WebP first, fall back to JPEG
+      canvas.toBlob(b => {
+        if (b) { resolve(b); return }
+        canvas.toBlob(b2 => b2 ? resolve(b2) : reject(new Error('压缩失败')), 'image/jpeg', 0.88)
+      }, 'image/webp', 0.85)
     }
-    img.onerror = () => reject(new Error('图片加载失败'))
+    img.onerror = () => {
+      URL.revokeObjectURL(url)
+      reject(new Error('图片加载失败'))
+    }
     img.src = url
   })
 }
