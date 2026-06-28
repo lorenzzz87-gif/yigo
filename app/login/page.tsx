@@ -25,8 +25,11 @@ export default function LoginPage() {
   const [success, setSuccess] = useState('')
 
   function destFor(role: string) {
-    // Buyers on a desktop screen go to the Italian B2B portal; phones use the mobile portal
-    if (role === 'buyer' && typeof window !== 'undefined' && window.innerWidth >= 1024) return '/b2b'
+    // Buyers on the b2b.* subdomain or a desktop screen → Italian B2B portal; phones → mobile portal
+    if (role === 'buyer' && typeof window !== 'undefined') {
+      const isB2BHost = window.location.hostname.startsWith('b2b.')
+      if (isB2BHost || window.innerWidth >= 1024) return '/b2b'
+    }
     return `/${role}`
   }
 
