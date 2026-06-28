@@ -40,7 +40,7 @@ export default function BulkImport({ wholesalerId, categories, onDone }: Props) 
   const [imageMap, setImageMap] = useState<Map<string, Blob>>(new Map())
   const [parsing, setParsing] = useState(false)
 
-  // ── Step 1a: parse Excel ──
+  // ── Step 1a: parse Excel (auto-create unknown categories) ──
   async function handleExcel(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0]; if (!file) return
     setParsing(true)
@@ -51,21 +51,48 @@ export default function BulkImport({ wholesalerId, categories, onDone }: Props) 
       const ws = wb.getWorksheet('商品导入') || wb.worksheets[0]
       const parsed: ParsedRow[] = []
       const errs: string[] = []
+
+      // local cache so the same new category isn't created twice
+      const localCats = [...categories]
+      const newCatNames: string[] = []
+
+      // collect all rows first
+      const rawRows: { name: string; catRaw: string; priceRaw: any; unit: string; stockRaw: any; barcode: string; description: string; rowNum: number }[] = []
       ws.eachRow((row, rowNum) => {
         if (rowNum <= 2) return
         const name = (row.getCell(1).text || '').trim()
-        const catRaw = (row.getCell(2).text || '').trim()
-        const priceRaw = row.getCell(3).value
-        const unit = (row.getCell(4).text || '').trim()
-        const stockRaw = row.getCell(5).value
-        const barcode = (row.getCell(6).text || '').trim()
-        const description = (row.getCell(7).text || '').trim()
         if (!name) return
-        if (!catRaw || !priceRaw || !unit) { errs.push(`第${rowNum}行 "${name}": 缺少必填字段`); return }
-        const cat = categories.find(c => c.name === catRaw)
-        if (!cat) { errs.push(`第${rowNum}行 "${name}": 分类"${catRaw}"不存在`); return }
-        parsed.push({ name, categoryId: cat.id, price: Number(priceRaw), unit, stock: Number(stockRaw) || 0, barcode, description: description || undefined, matched: false })
+        rawRows.push({
+          name,
+          catRaw: (row.getCell(2).text || '').trim(),
+          priceRaw: row.getCell(3).value,
+          unit: (row.getCell(4).text || '').trim(),
+          stockRaw: row.getCell(5).value,
+          barcode: (row.getCell(6).text || '').trim(),
+          description: (row.getCell(7).text || '').trim(),
+          rowNum,
+        })
       })
+
+      // auto-create missing categories
+      for (const r of rawRows) {
+        if (!r.catRaw) continue
+        const exists = localCats.find(c => c.name === r.catRaw)
+        if (!exists && !newCatNames.includes(r.catRaw)) {
+          newCatNames.push(r.catRaw)
+          const newCat = await store.addCategory(r.catRaw, wholesalerId)
+          localCats.push(newCat)
+        }
+      }
+
+      // now build rows
+      for (const r of rawRows) {
+        if (!r.catRaw || !r.priceRaw || !r.unit) { errs.push(`第${r.rowNum}行 "${r.name}": 缺少必填字段(分类/价格/单位)`); continue }
+        const cat = localCats.find(c => c.name === r.catRaw)!
+        parsed.push({ name: r.name, categoryId: cat.id, price: Number(r.priceRaw), unit: r.unit, stock: Number(r.stockRaw) || 0, barcode: r.barcode, description: r.description || undefined, matched: false })
+      }
+
+      if (newCatNames.length > 0) errs.unshift(`✅ 自动新建分类：${newCatNames.join('、')}`)
       setRows(parsed); setErrors(errs)
     } catch { setErrors(['Excel 解析失败，请检查文件格式']) }
     setParsing(false)
