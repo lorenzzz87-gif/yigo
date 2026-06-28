@@ -29,19 +29,29 @@ export async function compressImage(blob: Blob): Promise<Blob> {
   })
 }
 
-// Extract files from a ZIP, return Map<lowercased-filename, Blob>
-export async function extractZip(file: File): Promise<Map<string, Blob>> {
+export interface ZipImage {
+  blob: Blob
+  category?: string  // folder name = category (empty = root level, use Excel column)
+}
+
+// Extract files from a ZIP, return Map<barcode-key, ZipImage>
+// Folder name (one level deep) is treated as the product category
+export async function extractZip(file: File): Promise<Map<string, ZipImage>> {
   const JSZip = (await import('jszip')).default
   const zip = await JSZip.loadAsync(file)
-  const map = new Map<string, Blob>()
+  const map = new Map<string, ZipImage>()
   const IMAGE_EXT = /\.(jpe?g|png|webp|gif|bmp)$/i
   await Promise.all(
     Object.values(zip.files)
       .filter(f => !f.dir && IMAGE_EXT.test(f.name) && !f.name.split('/').pop()!.startsWith('._'))
       .map(async f => {
+        const parts = f.name.split('/').filter(p => p && !p.startsWith('__MACOSX'))
+        const filename = parts[parts.length - 1]
+        // folder = any intermediate path segment (skip root zip folder name if only 1 file deep)
+        const category = parts.length >= 2 ? parts[parts.length - 2] : undefined
         const blob = await f.async('blob')
-        const basename = f.name.split('/').pop()!.toLowerCase()
-        map.set(basename, blob)
+        const key = barcodeKey(filename)
+        if (key) map.set(key, { blob, category })
       })
   )
   return map

@@ -3,7 +3,7 @@ import { useState, useRef } from 'react'
 import ExcelJS from 'exceljs'
 import { store, Category } from '@/lib/store'
 import { exportProductTemplate } from '@/lib/excel'
-import { compressImage, extractZip, barcodeKey } from '@/lib/imageUtils'
+import { compressImage, extractZip, barcodeKey, ZipImage } from '@/lib/imageUtils'
 
 interface ParsedRow {
   name: string
@@ -38,7 +38,7 @@ export default function BulkImport({ wholesalerId, categories, onDone }: Props) 
   const zipRef = useRef<HTMLInputElement>(null)
   const imgRef = useRef<HTMLInputElement>(null)
   const [excelFile, setExcelFile] = useState<File | null>(null)
-  const [imageMap, setImageMap] = useState<Map<string, Blob>>(new Map())
+  const [imageMap, setImageMap] = useState<Map<string, ZipImage>>(new Map())
   const [parsing, setParsing] = useState(false)
 
   // ── Step 1a: parse Excel (auto-create unknown categories) ──
@@ -112,36 +112,60 @@ export default function BulkImport({ wholesalerId, categories, onDone }: Props) 
     e.target.value = ''
   }
 
-  // ── Step 1c: load images from multi-select ──
+  // ── Step 1c: load images from multi-select (no folder category info) ──
   async function handleImages(e: React.ChangeEvent<HTMLInputElement>) {
     const files = Array.from(e.target.files || [])
-    const map = new Map<string, Blob>()
-    files.forEach(f => map.set(f.name.toLowerCase(), f))
+    const map = new Map<string, ZipImage>()
+    files.forEach(f => map.set(barcodeKey(f.name), { blob: f }))
     setImageMap(prev => new Map([...prev, ...map]))
     e.target.value = ''
   }
 
-  // ── Step 1 → 2: match + preview ──
+  // ── Step 1 → 2: match + preview, apply folder-based category override ──
   async function doMatch() {
     if (rows.length === 0) return
+
+    // collect new categories from ZIP folders first
+    const localCats = [...categories]
+    const folderCats = new Set<string>()
+    for (const [, zi] of imageMap) {
+      if (zi.category) folderCats.add(zi.category)
+    }
+    const newCatMsgs: string[] = []
+    for (const catName of folderCats) {
+      if (!localCats.find(c => c.name === catName)) {
+        const nc = await store.addCategory(catName, wholesalerId)
+        localCats.push(nc)
+        newCatMsgs.push(catName)
+      }
+    }
+    if (newCatMsgs.length > 0) {
+      setErrors(p => [`✅ 从文件夹新建分类：${newCatMsgs.join('、')}`, ...p])
+    }
+
     const matched = await Promise.all(rows.map(async row => {
-      // match by barcode OR product name (both stripped of spaces/symbols)
       const barcodeK = barcodeKey(row.barcode)
       const nameK = barcodeKey(row.name)
-      let blob: Blob | undefined
-      for (const [fname, b] of imageMap) {
-        const fk = barcodeKey(fname)
-        if ((barcodeK && fk === barcodeK) || fk === nameK) { blob = b; break }
+      let zipImg: ZipImage | undefined
+      for (const [key, zi] of imageMap) {
+        if ((barcodeK && key === barcodeK) || key === nameK) { zipImg = zi; break }
       }
-      let preview: string | undefined
-      if (blob) {
+
+      // override category from folder if available
+      let categoryId = row.categoryId
+      if (zipImg?.category) {
+        const cat = localCats.find(c => c.name === zipImg!.category)
+        if (cat) categoryId = cat.id
+      }
+
+      if (zipImg?.blob) {
         try {
-          const compressed = await compressImage(blob)
-          preview = URL.createObjectURL(compressed)
-          return { ...row, imageBlob: compressed, imagePreview: preview, matched: true }
+          const compressed = await compressImage(zipImg.blob)
+          const preview = URL.createObjectURL(compressed)
+          return { ...row, categoryId, imageBlob: compressed, imagePreview: preview, matched: true }
         } catch { /* skip bad image */ }
       }
-      return { ...row, matched: false }
+      return { ...row, categoryId, matched: false }
     }))
     setRows(matched)
     setStep('preview')
@@ -221,11 +245,15 @@ export default function BulkImport({ wholesalerId, categories, onDone }: Props) 
               <div className="mt-3">
                 <div className="text-sm text-green-600 mb-1">✓ 已加载 {imageMap.size} 张图片，检测到的文件名：</div>
                 <div className="bg-gray-50 rounded-lg p-2 max-h-24 overflow-y-auto">
-                  {[...imageMap.keys()].map(name => (
-                    <div key={name} className="text-xs text-gray-500 font-mono">{name}</div>
+                  {[...imageMap.entries()].map(([key, zi]) => (
+                    <div key={key} className="text-xs text-gray-500 font-mono">
+                      {zi.category ? <span className="text-orange-500">{zi.category}/</span> : null}{key}
+                    </div>
                   ))}
                 </div>
-                <div className="text-xs text-gray-400 mt-1">图片文件名需和条码列一致（或和商品名一致），系统会自动配对</div>
+                <div className="text-xs text-gray-400 mt-1">
+                  橙色为文件夹名（自动当分类）· 文件名需和条码一致
+                </div>
               </div>
             )}
           </div>
