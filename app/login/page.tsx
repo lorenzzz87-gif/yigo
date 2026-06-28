@@ -24,6 +24,12 @@ export default function LoginPage() {
   const [error, setError] = useState('')
   const [success, setSuccess] = useState('')
 
+  function destFor(role: string) {
+    // Buyers on a desktop screen go to the Italian B2B portal; phones use the mobile portal
+    if (role === 'buyer' && typeof window !== 'undefined' && window.innerWidth >= 1024) return '/b2b'
+    return `/${role}`
+  }
+
   async function handleLogin() {
     if (!phone || !password) { setError('请填写手机号和密码'); return }
     setLoading(true); setError('')
@@ -31,7 +37,7 @@ export default function LoginPage() {
     setLoading(false)
     if (!user) { setError('手机号或密码错误'); return }
     store.setCurrentUser(user)
-    router.push(`/${user.role}`)
+    router.push(destFor(user.role))
   }
 
   async function handleRegister() {
@@ -115,7 +121,7 @@ export default function LoginPage() {
             {DEMO_ACCOUNTS.map(acc => (
               <button key={acc.phone} onClick={async () => {
                 const user = await store.loginByPhone(acc.phone, acc.password)
-                if (user) { store.setCurrentUser(user); router.push(`/${user.role}`) }
+                if (user) { store.setCurrentUser(user); router.push(destFor(user.role)) }
                 else setError('该测试账号尚未在数据库创建')
               }}
                 className={`flex items-center gap-2 px-3 py-2 rounded-xl border text-sm font-medium transition-all hover:opacity-80 ${acc.color}`}>
