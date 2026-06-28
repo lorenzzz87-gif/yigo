@@ -9,7 +9,6 @@ const DEMO_ACCOUNTS = [
   { label: '业务员', role: 'salesperson', phone: '13800000004', password: '123456', icon: '💼', color: 'bg-green-50 border-green-200 text-green-700' },
   { label: '商家A', role: 'buyer', phone: '13800000002', password: '123456', icon: '🏪', color: 'bg-blue-50 border-blue-200 text-blue-700' },
   { label: '商家B', role: 'buyer', phone: '13800000003', password: '123456', icon: '🏪', color: 'bg-blue-50 border-blue-200 text-blue-700' },
-  { label: '商家C', role: 'buyer', phone: '13800000005', password: '123456', icon: '🏪', color: 'bg-blue-50 border-blue-200 text-blue-700' },
 ]
 
 export default function LoginPage() {
@@ -133,6 +132,16 @@ export default function LoginPage() {
               </button>
             ))}
           </div>
+
+          <button onClick={async () => {
+            const user = await store.loginByPhone('13800000002', '123456')
+            if (user) { store.setCurrentUser(user); router.push('/b2b') }
+            else setError('该测试账号尚未在数据库创建')
+          }}
+            className="w-full mt-2 flex items-center justify-center gap-2 px-3 py-2.5 rounded-xl bg-gray-900 text-white text-sm font-medium hover:bg-gray-800 transition-all">
+            <span>🇮🇹</span>
+            <span>B2B 电脑版入口（意大利语）</span>
+          </button>
         </div>
       </div>
     </div>
