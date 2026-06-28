@@ -124,11 +124,13 @@ export default function BulkImport({ wholesalerId, categories, onDone }: Props) 
   async function doMatch() {
     if (rows.length === 0) return
     const matched = await Promise.all(rows.map(async row => {
-      // match by barcode filename (e.g. 8001234567.jpg)
-      const key = barcodeKey(row.barcode || row.name)
+      // match by barcode OR product name (both stripped of spaces/symbols)
+      const barcodeK = barcodeKey(row.barcode)
+      const nameK = barcodeKey(row.name)
       let blob: Blob | undefined
       for (const [fname, b] of imageMap) {
-        if (barcodeKey(fname) === key) { blob = b; break }
+        const fk = barcodeKey(fname)
+        if ((barcodeK && fk === barcodeK) || fk === nameK) { blob = b; break }
       }
       let preview: string | undefined
       if (blob) {
@@ -210,7 +212,17 @@ export default function BulkImport({ wholesalerId, categories, onDone }: Props) 
             </div>
             <input ref={zipRef} type="file" accept=".zip" className="hidden" onChange={handleZip} />
             <input ref={imgRef} type="file" accept="image/*" multiple className="hidden" onChange={handleImages} />
-            {imageMap.size > 0 && <div className="mt-3 text-sm text-green-600">✓ 已加载 {imageMap.size} 张图片</div>}
+            {imageMap.size > 0 && (
+              <div className="mt-3">
+                <div className="text-sm text-green-600 mb-1">✓ 已加载 {imageMap.size} 张图片，检测到的文件名：</div>
+                <div className="bg-gray-50 rounded-lg p-2 max-h-24 overflow-y-auto">
+                  {[...imageMap.keys()].map(name => (
+                    <div key={name} className="text-xs text-gray-500 font-mono">{name}</div>
+                  ))}
+                </div>
+                <div className="text-xs text-gray-400 mt-1">图片文件名需和条码列一致（或和商品名一致），系统会自动配对</div>
+              </div>
+            )}
           </div>
 
           {errors.length > 0 && (
