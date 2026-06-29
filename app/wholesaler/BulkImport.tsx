@@ -221,16 +221,24 @@ export default function BulkImport({ wholesalerId, categories, onDone }: Props) 
     if (imgOnlyMap.size === 0) return
     setImgOnlyRunning(true); setImgOnlyDone(null); setImgOnlyProgress(0)
 
-    // fetch all products for this wholesaler (barcode → id map)
+    // fetch all products (sku + barcode → id map)
     setImgOnlyMsg('正在加载商品列表…')
     const { supabase } = await import('@/lib/supabase')
-    const allProds: { id: string; barcode: string }[] = []
+    const allProds: { id: string; sku: string | null; barcode: string | null }[] = []
     for (let off = 0; off < 10000; off += 1000) {
-      const { data } = await supabase.from('products').select('id,barcode').eq('wholesaler_id', wholesalerId).not('barcode','is',null).range(off, off + 999)
+      const { data } = await supabase.from('products').select('id,sku,barcode').eq('wholesaler_id', wholesalerId).range(off, off + 999)
       if (!data || data.length === 0) break
       allProds.push(...data)
     }
-    const barcodeToId = new Map(allProds.map(p => [barcodeKey(p.barcode), p.id]))
+    // Build lookup: sku → id (priority), then barcode → id (fallback)
+    const keyToId = new Map<string, string>()
+    for (const p of allProds) {
+      if (p.barcode) keyToId.set(barcodeKey(p.barcode), p.id)
+    }
+    for (const p of allProds) {
+      if (p.sku) keyToId.set(barcodeKey(p.sku), p.id) // sku overwrites barcode if same key
+    }
+    const barcodeToId = keyToId
 
     let ok = 0, skipped = 0
     const entries = [...imgOnlyMap.entries()]
