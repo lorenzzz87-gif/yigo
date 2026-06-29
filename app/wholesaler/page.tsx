@@ -18,6 +18,7 @@ export default function WholesalerPage() {
   const [products, setProducts] = useState<Product[]>([])
   const [productTotal, setProductTotal] = useState(0)
   const [productPage, setProductPage] = useState(0)
+  const [activeCategoryId, setActiveCategoryId] = useState<string | undefined>()
   const PRODUCT_PAGE_SIZE = 50
   const [categories, setCategories] = useState<Category[]>([])
   const [showProductForm, setShowProductForm] = useState(false)
@@ -48,12 +49,18 @@ export default function WholesalerPage() {
     loadProducts(w, search, 0)
   }
 
-  async function loadProducts(w: string, q: string, page: number) {
+  async function loadProducts(w: string, q: string, page: number, catId?: string) {
     const [prods, total] = await Promise.all([
-      store.getProducts(w, q || undefined, PRODUCT_PAGE_SIZE, page * PRODUCT_PAGE_SIZE),
-      store.countProducts(w),
+      store.getProducts(w, q || undefined, PRODUCT_PAGE_SIZE, page * PRODUCT_PAGE_SIZE, catId),
+      store.countProducts(w, catId),
     ])
     setProducts(prods); setProductTotal(total); setProductPage(page)
+    setActiveCategoryId(catId)
+  }
+
+  async function loadProductsByCategory(catId: string) {
+    setSearch('')
+    await loadProducts(wid, '', 0, catId)
   }
 
   function showToast(msg: string) { setToast(msg); setTimeout(() => setToast(''), 3000) }
@@ -237,14 +244,22 @@ export default function WholesalerPage() {
             <div className="flex gap-2 mb-3">
               <input value={search}
                 onChange={e => setSearch(e.target.value)}
-                onKeyDown={e => e.key === 'Enter' && loadProducts(wid, search, 0)}
+                onKeyDown={e => { if (e.key === 'Enter') { setActiveCategoryId(undefined); loadProducts(wid, search, 0) } }}
                 placeholder="搜索商品名或条形码，回车确认…"
                 className="flex-1 border border-gray-200 rounded-lg px-3 py-2 text-sm outline-none focus:border-orange-400" />
-              <button onClick={() => loadProducts(wid, search, 0)} className="px-4 py-2 bg-gray-100 text-gray-600 rounded-lg text-sm hover:bg-gray-200">搜索</button>
+              <button onClick={() => { setActiveCategoryId(undefined); loadProducts(wid, search, 0) }} className="px-4 py-2 bg-gray-100 text-gray-600 rounded-lg text-sm hover:bg-gray-200">搜索</button>
               <button onClick={openAddProduct} className="px-4 py-2 bg-orange-500 text-white rounded-lg text-sm font-medium hover:bg-orange-600">+ 添加商品</button>
             </div>
-            <div className="text-xs text-gray-400 mb-3">
-              共 {productTotal} 个商品，显示第 {productPage * PRODUCT_PAGE_SIZE + 1}–{Math.min((productPage + 1) * PRODUCT_PAGE_SIZE, productTotal)} 条
+            <div className="flex items-center gap-3 mb-3">
+              <span className="text-xs text-gray-400">
+                {activeCategoryId
+                  ? `分类：${categories.find(c => c.id === activeCategoryId)?.name} — 共 ${productTotal} 个`
+                  : `共 ${productTotal} 个商品`}
+                ，第 {productPage * PRODUCT_PAGE_SIZE + 1}–{Math.min((productPage + 1) * PRODUCT_PAGE_SIZE, productTotal)} 条
+              </span>
+              {activeCategoryId && (
+                <button onClick={() => loadProducts(wid, '', 0)} className="text-xs text-orange-500 hover:underline">× 清除分类筛选</button>
+              )}
             </div>
             <div className="space-y-2">
               {filteredProducts.map(p => {
@@ -270,12 +285,12 @@ export default function WholesalerPage() {
             </div>
             {productTotal > PRODUCT_PAGE_SIZE && (
               <div className="flex items-center justify-center gap-3 mt-4">
-                <button disabled={productPage === 0} onClick={() => loadProducts(wid, search, productPage - 1)}
+                <button disabled={productPage === 0} onClick={() => loadProducts(wid, search, productPage - 1, activeCategoryId)}
                   className="px-4 py-2 text-sm bg-white border border-gray-200 rounded-lg hover:bg-gray-50 disabled:opacity-40">← 上一页</button>
                 <span className="text-sm text-gray-500">
                   {productPage + 1} / {Math.ceil(productTotal / PRODUCT_PAGE_SIZE)} 页
                 </span>
-                <button disabled={(productPage + 1) * PRODUCT_PAGE_SIZE >= productTotal} onClick={() => loadProducts(wid, search, productPage + 1)}
+                <button disabled={(productPage + 1) * PRODUCT_PAGE_SIZE >= productTotal} onClick={() => loadProducts(wid, search, productPage + 1, activeCategoryId)}
                   className="px-4 py-2 text-sm bg-white border border-gray-200 rounded-lg hover:bg-gray-50 disabled:opacity-40">下一页 →</button>
               </div>
             )}
@@ -352,12 +367,18 @@ export default function WholesalerPage() {
               <input value={newCatName} onChange={e => setNewCatName(e.target.value)} placeholder="新分类名称" className="flex-1 border border-gray-200 rounded-lg px-3 py-2 text-sm outline-none focus:border-orange-400" />
               <button onClick={addCategory} className="px-4 py-2 bg-orange-500 text-white rounded-lg text-sm font-medium hover:bg-orange-600">添加</button>
             </div>
-            <div className="space-y-2">
+            <div className="space-y-1">
               {categories.map(c => (
-                <div key={c.id} className="flex items-center justify-between py-2 border-b border-gray-100 last:border-0">
-                  <span className="text-gray-700">{c.name}</span>
-                  <span className="text-xs text-gray-300">{products.filter(p => p.categoryId === c.id).length} 个商品</span>
-                </div>
+                <button key={c.id}
+                  onClick={() => {
+                    setTab('products')
+                    setSearch('')
+                    loadProductsByCategory(c.id)
+                  }}
+                  className="w-full flex items-center justify-between py-2.5 px-3 rounded-lg hover:bg-orange-50 hover:text-orange-600 text-left border-b border-gray-50 last:border-0 transition-colors group">
+                  <span className="text-gray-700 group-hover:text-orange-600">{c.name}</span>
+                  <span className="text-xs text-gray-300 group-hover:text-orange-400">查看商品 →</span>
+                </button>
               ))}
             </div>
           </div>
