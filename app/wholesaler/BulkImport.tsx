@@ -174,7 +174,12 @@ export default function BulkImport({ wholesalerId, categories, onDone }: Props) 
           imageUrl = await store.uploadProductImage(wholesalerId, imgKey, row.imageBlob)
           } catch (e: any) { errs.push(`${row.name} 图片上传失败: ${e.message}`) }
         }
-        await store.addProduct({ name: row.name, categoryId: row.categoryId, price: row.price, unit: row.unit, stock: row.stock, barcode: row.barcode || undefined, description: row.description, image: imageUrl }, wholesalerId)
+        // SKU(编号) is primary key; barcode(EAN) is secondary
+        await store.addProduct(
+          { name: row.name, categoryId: row.categoryId, price: row.price, unit: row.unit, stock: row.stock, barcode: row.barcode || undefined, description: row.description, image: imageUrl },
+          wholesalerId,
+          row.sku || undefined  // SKU优先传入，无SKU才用条码
+        )
         ok++
       } catch (e: any) { errs.push(`${row.name}: ${e.message}`); skipped++ }
     }

@@ -280,18 +280,25 @@ export const store = {
     const { count } = await q
     return count || 0
   },
-  async addProduct(p: Omit<Product, 'id'>, wholesalerId: string): Promise<Product> {
-    // Same barcode + same wholesaler → update instead of insert
-    if (p.barcode) {
-      const { data: existing } = await supabase.from('products').select('id').eq('wholesaler_id', wholesalerId).eq('barcode', p.barcode).maybeSingle()
+  async addProduct(p: Omit<Product, 'id'>, wholesalerId: string, sku?: string): Promise<Product> {
+    // Dedup priority: SKU(编号) first → EAN barcode second
+    const lookupKey = sku || p.barcode
+    if (lookupKey) {
+      const { data: existing } = await supabase.from('products')
+        .select('id')
+        .eq('wholesaler_id', wholesalerId)
+        .eq('barcode', lookupKey)
+        .maybeSingle()
       if (existing) {
         const upd: Record<string, unknown> = { name: p.name, category_id: p.categoryId, price: p.price, unit: p.unit, stock: p.stock, description: p.description }
-        if (p.image) upd.image = p.image // only overwrite image if new one provided
+        if (p.image) upd.image = p.image
         await supabase.from('products').update(upd).eq('id', existing.id)
         return { ...p, id: existing.id, wholesalerId }
       }
     }
-    const product = { id: `p${Date.now()}${Math.floor(Math.random() * 1000)}`, name: p.name, category_id: p.categoryId, price: p.price, unit: p.unit, stock: p.stock, barcode: p.barcode, description: p.description, image: p.image, wholesaler_id: wholesalerId }
+    // Store SKU as barcode field when no EAN available, so future lookups work
+    const storedBarcode = sku || p.barcode || null
+    const product = { id: `p${Date.now()}${Math.floor(Math.random() * 1000)}`, name: p.name, category_id: p.categoryId, price: p.price, unit: p.unit, stock: p.stock, barcode: storedBarcode, description: p.description, image: p.image, wholesaler_id: wholesalerId }
     await supabase.from('products').insert(product)
     return { ...p, id: product.id, wholesalerId }
   },
