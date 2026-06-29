@@ -271,7 +271,7 @@ export default function BulkImport({ wholesalerId, categories, onDone }: Props) 
         <div className="space-y-4">
           <div className="bg-white rounded-xl p-5 shadow-sm">
             <div className="text-sm font-medium text-gray-700 mb-3">① 下载模板 / 上传商品表（Excel）</div>
-            <p className="text-xs text-gray-400 mb-3">第6列填条码，系统用条码匹配图片。无条码填唯一货号。</p>
+            <p className="text-xs text-gray-400 mb-3">第1列填编号，系统用编号匹配图片。无编号再用条码。</p>
             <div className="flex gap-3 flex-wrap">
               <button onClick={async () => { try { await exportProductTemplate(categories) } catch(e:any) { alert('下载失败:' + e.message) } }}
                 className="px-4 py-2 border border-orange-400 text-orange-500 rounded-lg text-sm font-medium hover:bg-orange-50">
@@ -286,8 +286,8 @@ export default function BulkImport({ wholesalerId, categories, onDone }: Props) 
           </div>
 
           <div className="bg-white rounded-xl p-5 shadow-sm">
-            <div className="text-sm font-medium text-gray-700 mb-1">② 上传图片（按条码命名）</div>
-            <p className="text-xs text-gray-400 mb-3">图片文件名 = 条码，如 <code className="bg-gray-100 px-1 rounded">8001234567.jpg</code>。支持 ZIP 打包或多选图片。</p>
+            <div className="text-sm font-medium text-gray-700 mb-1">② 上传图片（按编号命名）</div>
+            <p className="text-xs text-gray-400 mb-3">图片文件名 = 编号，如 <code className="bg-gray-100 px-1 rounded">001.jpg</code>。支持 ZIP 打包或多选图片。</p>
             <div className="grid grid-cols-2 gap-3">
               <button onClick={() => zipRef.current?.click()} className="flex flex-col items-center gap-1.5 p-4 border-2 border-dashed border-gray-200 rounded-xl hover:border-orange-400 hover:bg-orange-50 transition-colors">
                 <span className="text-2xl">📦</span>
@@ -313,7 +313,7 @@ export default function BulkImport({ wholesalerId, categories, onDone }: Props) 
                   ))}
                 </div>
                 <div className="text-xs text-gray-400 mt-1">
-                  橙色为文件夹名（自动当分类）· 文件名需和条码一致
+                  橙色为文件夹名（自动当分类）· 文件名需和编号一致
                 </div>
               </div>
             )}
@@ -339,7 +339,7 @@ export default function BulkImport({ wholesalerId, categories, onDone }: Props) 
           {/* ── 独立图片更新区 ── */}
           <div className="bg-white rounded-xl p-5 shadow-sm border-2 border-dashed border-blue-100">
             <div className="text-sm font-semibold text-gray-700 mb-1">🖼️ 仅更新已有商品的图片</div>
-            <p className="text-xs text-gray-400 mb-3">图片已导入、只想补充或更换图片时使用。图片文件名 = 条码，自动匹配已有商品。</p>
+            <p className="text-xs text-gray-400 mb-3">图片已导入、只想补充或更换图片时使用。图片文件名 = 编号，自动匹配已有商品。</p>
             <div className="grid grid-cols-2 gap-3 mb-3">
               <button onClick={() => zipOnlyRef.current?.click()} disabled={imgOnlyRunning}
                 className="flex flex-col items-center gap-1.5 p-3 border border-blue-200 rounded-xl hover:bg-blue-50 transition-colors text-sm">
