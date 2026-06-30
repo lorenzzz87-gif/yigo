@@ -66,18 +66,18 @@ export default function BulkImport({ wholesalerId, categories, onDone }: Props) 
 
       ws.eachRow((row, rowNum) => {
         if (rowNum <= 2) return
-        // A=编号(图片名)  B=条形码  C=中文品名  D=西文品名  E=包装数  F=装箱数  G=售价  H=IVA  I=库存
-        const sku      = (row.getCell(1).text || '').trim()
-        const barcode  = (row.getCell(2).text || '').trim()
-        const name     = (row.getCell(3).text || '').trim()
+        // A=编号  B=条形码  C=中文名  D=西文名  E=分类  F=子分类  G=包装数  H=装箱数  I=售价  J=IVA  K=库存
+        const sku          = (row.getCell(1).text || '').trim()
+        const barcode      = (row.getCell(2).text || '').trim()
+        const name         = (row.getCell(3).text || '').trim()
         if (!name) return
-        const desc      = (row.getCell(4).text || '').trim()
-        const unit      = (row.getCell(5).text || '').trim()
-        const boxQtyRaw    = row.getCell(6).value
-        const priceRaw     = row.getCell(7).value
-        const stockRaw     = row.getCell(9).value
-        const categoryName  = (row.getCell(10).text || '').trim() || undefined
-        const subcategory   = (row.getCell(11).text || '').trim() || undefined
+        const desc         = (row.getCell(4).text || '').trim()
+        const categoryName = (row.getCell(5).text || '').trim() || undefined
+        const subcategory  = (row.getCell(6).text || '').trim() || undefined
+        const unit         = (row.getCell(7).text || '').trim()
+        const boxQtyRaw    = row.getCell(8).value
+        const priceRaw     = row.getCell(9).value
+        const stockRaw     = row.getCell(11).value
         if (!priceRaw || !unit) { errs.push(`第${rowNum}行 "${name}": 缺少售价或包装数`); return }
         const boxQty = boxQtyRaw ? Number(boxQtyRaw) || undefined : undefined
         // categoryId 留空，由 ZIP 文件夹（优先）或 J 列分类名在 doMatch 阶段填入

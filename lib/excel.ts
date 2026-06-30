@@ -204,39 +204,39 @@ export async function exportProductTemplate(_categories: Category[]) {
   const wb = new ExcelJS.Workbook()
   const ws = wb.addWorksheet('商品导入', { views: [{ state: 'frozen', ySplit: 2 }] })
 
-  // 列顺序：编号 / 条形码 / 中文品名 / 西文品名 / 包装数 / 装箱数 / 售价 / IVA / 库存
+  // 列顺序：A编号 B条形码 C中文名 D西文名 E分类 F子分类 G包装数 H装箱数 I售价 J IVA K库存
   ws.columns = [
-    { key: 'sku',      width: 12 },
-    { key: 'barcode',  width: 16 },
-    { key: 'name',     width: 24 },
-    { key: 'nameIt',   width: 28 },
-    { key: 'unit',     width: 10 },
-    { key: 'boxQty',   width: 10 },
-    { key: 'price',    width: 12 },
-    { key: 'iva',      width: 8  },
-    { key: 'stock',    width: 10 },
+    { key: 'sku',         width: 12 },
+    { key: 'barcode',     width: 16 },
+    { key: 'name',        width: 24 },
+    { key: 'nameIt',      width: 28 },
     { key: 'category',    width: 22 },
     { key: 'subcategory', width: 20 },
+    { key: 'unit',        width: 10 },
+    { key: 'boxQty',      width: 10 },
+    { key: 'price',       width: 12 },
+    { key: 'iva',         width: 8  },
+    { key: 'stock',       width: 10 },
   ]
 
   ws.mergeCells('A1:K1')
   const t = ws.getCell('A1')
-  t.value = 'Yigo 商品导入模板 — J列填分类名可直接分配分类（也可用ZIP文件夹）'
+  t.value = 'Yigo 商品导入模板  A编号 · B条形码 · C中文名 · D西文名 · E分类 · F子分类 · G包装数 · H装箱数 · I售价 · J IVA · K库存'
   t.font = { bold: true, color: { argb: 'FFFFFFFF' } }
   t.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF97316' } }
   t.alignment = { vertical: 'middle', horizontal: 'center' }
   ws.getRow(1).height = 28
 
-  const hr = ws.addRow(['编号', '条形码*', '中文品名*', '西文品名', '包装数*', '装箱数', '售价(€)*', 'IVA%', '库存', '分类（可选）', '子分类（可选）'])
+  const hr = ws.addRow(['编号', '条形码*', '中文品名*', '西文名', '分类（可选）', '子分类（可选）', '包装数*', '装箱数', '售价(€)*', 'IVA%', '库存'])
   styleHeader(hr, 'FF374151')
 
   ;[
-    ['001', '6901028001', '可口可乐 330ml', 'Coca-Cola 330ml', '24罐', 24, 0.55, 22, 500, '饮料', '碳酸饮料'],
-    ['002', '6901028002', '矿泉水 500ml',   'Acqua 500ml',     '12瓶', 12, 0.30,  4, 800, '饮料', '矿泉水'],
+    ['001', '6901028001', '可口可乐 330ml', 'Coca-Cola 330ml', '饮料', '碳酸饮料', '24罐', 24, 0.55, 22, 500],
+    ['002', '6901028002', '矿泉水 500ml',   'Acqua 500ml',     '饮料', '矿泉水',   '12瓶', 12, 0.30,  4, 800],
   ].forEach(s => {
     const row = ws.addRow(s)
-    row.getCell(7).numFmt = '€0.00'
-    row.getCell(8).numFmt = '0"%"'
+    row.getCell(9).numFmt = '€0.00'
+    row.getCell(10).numFmt = '0"%"'
     row.height = 22
     row.eachCell(cell => styleCell(cell))
   })
@@ -246,24 +246,23 @@ export async function exportProductTemplate(_categories: Category[]) {
   const infoRows = [
     ['Yigo 商品导入说明'],
     [''],
-    ['Excel 列说明（共9列）:'],
-    ['A - 编号（内部货号，选填）'],
-    ['B - 条形码（必填）'],
-    ['  ※ 图片文件名 = A列编号（如 001.jpg），无编号时用条形码'],
+    ['Excel 列说明（共11列）:'],
+    ['A - 编号（内部货号，选填；图片文件名需与编号一致，如 001.jpg）'],
+    ['B - 条形码（选填）'],
     ['C - 中文品名（必填）'],
-    ['D - 西文品名（意大利语，B2B端显示）'],
-    ['E - 包装数/单位，如 24罐、12瓶/箱（必填）'],
-    ['F - 装箱数（每箱件数，选填）'],
-    ['G - 售价，单位欧元（必填）'],
-    ['H - IVA税率，如 22 或 4（不含%号）'],
-    ['I - 库存数量'],
-    ['J - 分类名（选填）：直接写分类名如"800 Unipart"，不存在则自动创建'],
-    ['  ※ J列优先级低于ZIP文件夹；ZIP文件夹有分类时以ZIP为准'],
-    ['K - 子分类（选填）：同一分类下的细分，如"S系列"、"LED大灯"等'],
+    ['D - 西文品名（意大利语，B2B端显示，选填）'],
+    ['E - 分类（选填）：直接写分类名如"800 Unipart"，不存在则自动创建'],
+    ['  ※ ZIP文件夹分类优先级高于E列；两者都有时以ZIP为准'],
+    ['F - 子分类（选填）：同分类下的细分，如"S系列"、"LED大灯"等'],
+    ['G - 包装数/单位，如 24罐、12瓶/箱（必填）'],
+    ['H - 装箱数（每箱件数，选填）'],
+    ['I - 售价，单位欧元（必填）'],
+    ['J - IVA税率，如 22 或 4（不含%号，选填）'],
+    ['K - 库存数量（选填）'],
     [''],
     ['图片 ZIP 说明:'],
-    ['• 用文件夹名作为分类，如：饮料/6901028001.png'],
-    ['• 不在文件夹里的图片：无分类（此时用J列分类）'],
+    ['• 用文件夹名作为分类，如：饮料/001.jpg（优先于E列）'],
+    ['• 不在文件夹里的图片：分类由E列决定'],
     ['• 已有分类直接用；新分类名自动创建'],
     ['• 支持 jpg / png / webp 格式'],
   ]
