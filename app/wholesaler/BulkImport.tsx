@@ -204,12 +204,28 @@ export default function BulkImport({ wholesalerId, categories, onDone }: Props) 
     setProgress(100)
     setProgressMsg('验证中…')
 
-    // Post-import verification: count actual rows in DB
+    // Post-import verification: raw fetch test to bypass Supabase JS client
     try {
-      const { supabase } = await import('@/lib/supabase')
-      const { count } = await supabase.from('products').select('*', { count: 'exact', head: true }).eq('wholesaler_id', wholesalerId)
-      errs.push(`[诊断] 导入后DB实际商品数: ${count ?? '查询失败'} 条 (wholesalerId=${wholesalerId})`)
-    } catch (e: any) { errs.push(`[诊断] 验证查询失败: ${e.message}`) }
+      const sbUrl = process.env.NEXT_PUBLIC_SUPABASE_URL ?? ''
+      const sbKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ?? ''
+      // 1. Count via raw fetch
+      const cntRes = await fetch(`${sbUrl}/rest/v1/products?wholesaler_id=eq.${wholesalerId}&select=id`, {
+        headers: { apikey: sbKey, Authorization: `Bearer ${sbKey}`, Prefer: 'count=exact' }
+      })
+      const cntRange = cntRes.headers.get('content-range') ?? 'null'
+      // 2. Test direct insert via raw fetch
+      const testId = `p_diag_${Date.now()}`
+      const insRes = await fetch(`${sbUrl}/rest/v1/products`, {
+        method: 'POST',
+        headers: { apikey: sbKey, Authorization: `Bearer ${sbKey}`, 'Content-Type': 'application/json', Prefer: 'return=minimal' },
+        body: JSON.stringify({ id: testId, name: '诊断测试', category_id: null, price: 1, unit: '个', stock: 1, wholesaler_id: wholesalerId })
+      })
+      const insStatus = insRes.status
+      const insBody = await insRes.text()
+      // cleanup
+      await fetch(`${sbUrl}/rest/v1/products?id=eq.${testId}`, { method: 'DELETE', headers: { apikey: sbKey, Authorization: `Bearer ${sbKey}` } })
+      errs.push(`[诊断] URL=${sbUrl} | 商品数=${cntRange} | 直接写入状态=${insStatus} | 响应=${insBody.slice(0,80)}`)
+    } catch (e: any) { errs.push(`[诊断] 验证失败: ${e.message}`) }
 
     setProgressMsg('完成！')
     setErrors(errs)
