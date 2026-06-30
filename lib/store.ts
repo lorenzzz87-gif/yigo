@@ -273,7 +273,8 @@ export const store = {
   },
   async addCategory(name: string, wholesalerId: string): Promise<Category> {
     const cat = { id: `c${Date.now()}`, name, wholesaler_id: wholesalerId }
-    await supabase.from('categories').insert(cat)
+    const { error } = await supabase.from('categories').insert(cat)
+    if (error) throw new Error('分类创建失败: ' + error.message)
     return { id: cat.id, name, wholesalerId }
   },
 
@@ -312,8 +313,9 @@ export const store = {
         return { ...p, id: existing.id, wholesalerId }
       }
     }
-    const product = { id: `p${Date.now()}${Math.floor(Math.random() * 1000)}`, name: p.name, category_id: p.categoryId, price: p.price, unit: p.unit, stock: p.stock, sku: sku || null, barcode: p.barcode || null, description: p.description, image: p.image, video_url: p.videoUrl || null, box_qty: p.boxQty || null, subcategory: p.subcategory || null, wholesaler_id: wholesalerId }
-    await supabase.from('products').insert(product)
+    const product = { id: `p${Date.now()}${Math.floor(Math.random() * 1000)}`, name: p.name, category_id: p.categoryId || null, price: p.price, unit: p.unit, stock: p.stock, sku: sku || null, barcode: p.barcode || null, description: p.description || null, image: p.image || null, video_url: p.videoUrl || null, box_qty: p.boxQty || null, subcategory: p.subcategory || null, wholesaler_id: wholesalerId }
+    const { error } = await supabase.from('products').insert(product)
+    if (error) throw new Error(error.message + (error.details ? ' | ' + error.details : '') + (error.hint ? ' | 提示: ' + error.hint : ''))
     return { ...p, sku, id: product.id, wholesalerId }
   },
   async updateProduct(id: string, updates: Partial<Product>) {

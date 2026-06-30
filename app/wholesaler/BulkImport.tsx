@@ -177,6 +177,8 @@ export default function BulkImport({ wholesalerId, categories, onDone }: Props) 
     const total = rows.length
     const errs: string[] = []
 
+    if (!wholesalerId) { errs.push('错误：wholesalerId 为空，请重新登录'); setErrors(errs); setResult({ ok: 0, skipped: total }); setStep('done'); return }
+
     for (let i = 0; i < rows.length; i++) {
       const row = rows[i]
       setProgress(Math.round((i / total) * 100))
