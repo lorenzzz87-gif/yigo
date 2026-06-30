@@ -92,7 +92,8 @@ export default function BuyerPage() {
                       {p.image ? <img src={p.image} alt={p.name} className="w-full h-full object-cover" /> : <span className="text-4xl">{productEmoji(p.categoryId)}</span>}
                     </div>
                     <div className="font-medium text-gray-800 text-sm truncate mb-0.5">{p.name}</div>
-                    <div className="flex items-center gap-2 mb-2">
+                    <div className="flex items-center gap-2 mb-2 flex-wrap">
+                      {p.subcategory && <span className="text-xs bg-orange-50 text-orange-500 px-1.5 py-0.5 rounded">{p.subcategory}</span>}
                       <span className="text-xs text-gray-400">库存: {p.stock} {p.unit}</span>
                       {p.videoUrl && <a href={p.videoUrl} target="_blank" rel="noreferrer" className="text-xs text-blue-500 hover:underline">🎬 视频</a>}
                     </div>

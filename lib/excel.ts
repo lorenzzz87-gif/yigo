@@ -215,10 +215,11 @@ export async function exportProductTemplate(_categories: Category[]) {
     { key: 'price',    width: 12 },
     { key: 'iva',      width: 8  },
     { key: 'stock',    width: 10 },
-    { key: 'category', width: 22 },
+    { key: 'category',    width: 22 },
+    { key: 'subcategory', width: 20 },
   ]
 
-  ws.mergeCells('A1:J1')
+  ws.mergeCells('A1:K1')
   const t = ws.getCell('A1')
   t.value = 'Yigo 商品导入模板 — J列填分类名可直接分配分类（也可用ZIP文件夹）'
   t.font = { bold: true, color: { argb: 'FFFFFFFF' } }
@@ -226,12 +227,12 @@ export async function exportProductTemplate(_categories: Category[]) {
   t.alignment = { vertical: 'middle', horizontal: 'center' }
   ws.getRow(1).height = 28
 
-  const hr = ws.addRow(['编号', '条形码*', '中文品名*', '西文品名', '包装数*', '装箱数', '售价(€)*', 'IVA%', '库存', '分类（可选）'])
+  const hr = ws.addRow(['编号', '条形码*', '中文品名*', '西文品名', '包装数*', '装箱数', '售价(€)*', 'IVA%', '库存', '分类（可选）', '子分类（可选）'])
   styleHeader(hr, 'FF374151')
 
   ;[
-    ['001', '6901028001', '可口可乐 330ml', 'Coca-Cola 330ml', '24罐', 24, 0.55, 22, 500, '饮料'],
-    ['002', '6901028002', '矿泉水 500ml',   'Acqua 500ml',     '12瓶', 12, 0.30,  4, 800, '饮料'],
+    ['001', '6901028001', '可口可乐 330ml', 'Coca-Cola 330ml', '24罐', 24, 0.55, 22, 500, '饮料', '碳酸饮料'],
+    ['002', '6901028002', '矿泉水 500ml',   'Acqua 500ml',     '12瓶', 12, 0.30,  4, 800, '饮料', '矿泉水'],
   ].forEach(s => {
     const row = ws.addRow(s)
     row.getCell(7).numFmt = '€0.00'
@@ -258,6 +259,7 @@ export async function exportProductTemplate(_categories: Category[]) {
     ['I - 库存数量'],
     ['J - 分类名（选填）：直接写分类名如"800 Unipart"，不存在则自动创建'],
     ['  ※ J列优先级低于ZIP文件夹；ZIP文件夹有分类时以ZIP为准'],
+    ['K - 子分类（选填）：同一分类下的细分，如"S系列"、"LED大灯"等'],
     [''],
     ['图片 ZIP 说明:'],
     ['• 用文件夹名作为分类，如：饮料/6901028001.png'],
