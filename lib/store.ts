@@ -79,6 +79,28 @@ export interface Product {
 
 export type OrderUnit = 'pack' | 'box'
 
+export interface BuyerProfile {
+  userId: string
+  // Dati fatturazione
+  ragioneSociale?: string
+  piva?: string
+  codiceFiscale?: string
+  indirizzoFattura?: string
+  capFattura?: string
+  cittaFattura?: string
+  provinciaFattura?: string
+  codiceSdi?: string
+  pec?: string
+  // Indirizzo spedizione (se diverso da fatturazione)
+  indirizzoSpedizione?: string
+  capSpedizione?: string
+  cittaSpedizione?: string
+  noteConsegna?: string
+  // Contatti ordini
+  emailOrdini?: string
+  telefono?: string
+}
+
 export interface CartItem {
   productId: string
   quantity: number
@@ -218,6 +240,35 @@ export const store = {
   async getWholesalerLogo(wholesalerId: string): Promise<string | null> {
     const { data } = await supabase.from('wholesalers').select('logo').eq('id', wholesalerId).maybeSingle()
     return data?.logo || null
+  },
+
+  async getBuyerProfile(userId: string): Promise<BuyerProfile | null> {
+    const { data } = await supabase.from('buyer_profiles').select('*').eq('user_id', userId).maybeSingle()
+    if (!data) return null
+    return {
+      userId: data.user_id,
+      ragioneSociale: data.ragione_sociale, piva: data.piva, codiceFiscale: data.codice_fiscale,
+      indirizzoFattura: data.indirizzo_fattura, capFattura: data.cap_fattura,
+      cittaFattura: data.citta_fattura, provinciaFattura: data.provincia_fattura,
+      codiceSdi: data.codice_sdi, pec: data.pec,
+      indirizzoSpedizione: data.indirizzo_spedizione, capSpedizione: data.cap_spedizione,
+      cittaSpedizione: data.citta_spedizione, noteConsegna: data.note_consegna,
+      emailOrdini: data.email_ordini, telefono: data.telefono,
+    }
+  },
+  async saveBuyerProfile(p: BuyerProfile): Promise<void> {
+    const row = {
+      user_id: p.userId,
+      ragione_sociale: p.ragioneSociale || null, piva: p.piva || null,
+      codice_fiscale: p.codiceFiscale || null, indirizzo_fattura: p.indirizzoFattura || null,
+      cap_fattura: p.capFattura || null, citta_fattura: p.cittaFattura || null,
+      provincia_fattura: p.provinciaFattura || null, codice_sdi: p.codiceSdi || null,
+      pec: p.pec || null, indirizzo_spedizione: p.indirizzoSpedizione || null,
+      cap_spedizione: p.capSpedizione || null, citta_spedizione: p.cittaSpedizione || null,
+      note_consegna: p.noteConsegna || null, email_ordini: p.emailOrdini || null,
+      telefono: p.telefono || null,
+    }
+    await supabase.from('buyer_profiles').upsert(row, { onConflict: 'user_id' })
   },
 
   // Image upload to Supabase Storage (returns public URL)

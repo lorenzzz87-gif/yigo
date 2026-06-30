@@ -1,13 +1,13 @@
 'use client'
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { store, User, Product, Category, Order } from '@/lib/store'
+import { store, User, Product, Category, Order, BuyerProfile } from '@/lib/store'
 
 type Lang = 'it' | 'zh'
 
 const T: Record<Lang, Record<string, string>> = {
-  it: { catalog: 'Catalogo', myOrders: 'I miei ordini', search: 'Cerca prodotti…', all: 'Tutti', cart: 'Carrello', stock: 'Disponibilità', total: 'Totale', submit: 'Invia ordine', submitting: 'Invio…', sent: 'Ordine inviato!', empty: 'Il carrello è vuoto', note: 'Note', notePh: 'Es. consegnare al più presto…', logout: 'Esci', noProducts: 'Nessun prodotto disponibile', noOrders: 'Nessun ordine', addToCart: 'Aggiungi', items: 'articoli', qty: 'Q.tà', mobileVer: '手机版', backCatalog: 'Continua acquisti', remove: 'Rimuovi', checkout: 'Vai al carrello' },
-  zh: { catalog: '商品目录', myOrders: '我的订单', search: '搜索商品…', all: '全部', cart: '购物车', stock: '库存', total: '合计', submit: '提交订单', submitting: '提交中…', sent: '下单成功！', empty: '购物车为空', note: '备注', notePh: '如：请尽快发货…', logout: '退出', noProducts: '暂无商品', noOrders: '暂无订单', addToCart: '加入', items: '种商品', qty: '数量', mobileVer: '手机版', backCatalog: '继续选购', remove: '移除', checkout: '去购物车' },
+  it: { catalog: 'Catalogo', myOrders: 'I miei ordini', profilo: 'Profilo', search: 'Cerca prodotti…', all: 'Tutti', cart: 'Carrello', stock: 'Disponibilità', total: 'Totale', submit: 'Invia ordine', submitting: 'Invio…', sent: 'Ordine inviato!', empty: 'Il carrello è vuoto', note: 'Note', notePh: 'Es. consegnare al più presto…', logout: 'Esci', noProducts: 'Nessun prodotto disponibile', noOrders: 'Nessun ordine', addToCart: 'Aggiungi', items: 'articoli', qty: 'Q.tà', mobileVer: '手机版', backCatalog: 'Continua acquisti', remove: 'Rimuovi', checkout: 'Vai al carrello', save: 'Salva', saving: 'Salvataggio…', saved: '✓ Salvato', profiloDesc: 'Dati utilizzati per fatturazione, spedizioni e comunicazioni ordini.' },
+  zh: { catalog: '商品目录', myOrders: '我的订单', profilo: '我的资料', search: '搜索商品…', all: '全部', cart: '购物车', stock: '库存', total: '合计', submit: '提交订单', submitting: '提交中…', sent: '下单成功！', empty: '购物车为空', note: '备注', notePh: '如：请尽快发货…', logout: '退出', noProducts: '暂无商品', noOrders: '暂无订单', addToCart: '加入', items: '种商品', qty: '数量', mobileVer: '手机版', backCatalog: '继续选购', remove: '移除', checkout: '去购物车', save: '保存', saving: '保存中…', saved: '✓ 已保存', profiloDesc: '用于开票、物流发货和订单通知的信息。' },
 }
 const STATUS: Record<Lang, Record<string, string>> = {
   it: { pending_review: 'In revisione', pending: 'In attesa di conferma', confirmed: 'Confermato', shipped: 'Spedito', completed: 'Completato', cancelled: 'Annullato' },
@@ -22,7 +22,7 @@ export default function B2BPage() {
   const router = useRouter()
   const [user, setUser] = useState<User | null>(null)
   const [lang, setLang] = useState<Lang>('it')
-  const [view, setView] = useState<'catalog' | 'orders'>('catalog')
+  const [view, setView] = useState<'catalog' | 'orders' | 'profilo'>('catalog')
   const [products, setProducts] = useState<Product[]>([])
   const [productTotal, setProductTotal] = useState(0)
   const [productPage, setProductPage] = useState(0)
@@ -43,6 +43,10 @@ export default function B2BPage() {
   const [unitPicker, setUnitPicker] = useState<string | null>(null)
   const [detailProduct, setDetailProduct] = useState<Product | null>(null)
   const [wholesalerLogo, setWholesalerLogo] = useState<string | null>(null)
+  const [profile, setProfile] = useState<BuyerProfile | null>(null)
+  const [profileForm, setProfileForm] = useState<Omit<BuyerProfile, 'userId'>>({})
+  const [profileSaving, setProfileSaving] = useState(false)
+  const [profileSaved, setProfileSaved] = useState(false)
 
   const t = T[lang]
 
@@ -52,8 +56,12 @@ export default function B2BPage() {
     setUser(u)
     const savedLang = (typeof window !== 'undefined' && localStorage.getItem('yg_lang')) as Lang | null
     if (savedLang) setLang(savedLang)
-    Promise.all([store.getCategories(u.wholesalerId), store.getOrdersByBuyer(u.id), store.getWholesalerLogo(u.wholesalerId!)]).then(([c, o, logo]) => {
-      setCategories(c); setOrders(o); if (logo) setWholesalerLogo(logo)
+    Promise.all([store.getCategories(u.wholesalerId), store.getOrdersByBuyer(u.id), store.getWholesalerLogo(u.wholesalerId!), store.getBuyerProfile(u.id)]).then(([c, o, logo, prof]) => {
+      setCategories(c); setOrders(o)
+      if (logo) setWholesalerLogo(logo)
+      const p = prof || { userId: u.id }
+      setProfile(p)
+      setProfileForm({ ragioneSociale: p.ragioneSociale, piva: p.piva, codiceFiscale: p.codiceFiscale, indirizzoFattura: p.indirizzoFattura, capFattura: p.capFattura, cittaFattura: p.cittaFattura, provinciaFattura: p.provinciaFattura, codiceSdi: p.codiceSdi, pec: p.pec, indirizzoSpedizione: p.indirizzoSpedizione, capSpedizione: p.capSpedizione, cittaSpedizione: p.cittaSpedizione, noteConsegna: p.noteConsegna, emailOrdini: p.emailOrdini, telefono: p.telefono })
     })
     loadProducts(u.wholesalerId, '', 0, undefined)
   }, [router])
@@ -127,6 +135,14 @@ export default function B2BPage() {
     showToast(t.sent); setPlacing(false)
   }
 
+  async function saveProfile() {
+    if (!user) return
+    setProfileSaving(true)
+    await store.saveBuyerProfile({ userId: user.id, ...profileForm })
+    setProfileSaved(true); setTimeout(() => setProfileSaved(false), 3000)
+    setProfileSaving(false)
+  }
+
   function logout() { store.setCurrentUser(null); router.push('/entry') }
 
   const cartCount = cart.reduce((s, i) => s + i.quantity, 0)
@@ -178,7 +194,7 @@ export default function B2BPage() {
 
         {/* sub nav */}
         <div className="max-w-7xl mx-auto px-6 flex gap-6 -mb-px">
-          {([['catalog', t.catalog], ['orders', t.myOrders]] as const).map(([k, label]) => (
+          {([['catalog', t.catalog], ['orders', t.myOrders], ['profilo', t.profilo]] as const).map(([k, label]) => (
             <button key={k} onClick={() => setView(k)}
               className={`py-3 text-sm font-medium border-b-2 transition ${view === k ? 'border-orange-500 text-orange-600' : 'border-transparent text-gray-500 hover:text-gray-800'}`}>
               {label}
@@ -328,6 +344,88 @@ export default function B2BPage() {
                 ))}
               </div>
             )}
+          </div>
+        )}
+
+        {view === 'profilo' && (
+          <div className="max-w-2xl space-y-5">
+            <p className="text-sm text-gray-600">{t.profiloDesc}</p>
+
+            {/* Dati fatturazione */}
+            <section className="bg-white rounded-2xl p-5 shadow-sm">
+              <h3 className="font-bold text-gray-800 mb-4 flex items-center gap-2">🧾 {lang === 'it' ? 'Dati fatturazione' : '开票信息'}</h3>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                {[
+                  { key: 'ragioneSociale', label: lang === 'it' ? 'Ragione Sociale' : '公司名称', full: true },
+                  { key: 'piva', label: 'P.IVA' },
+                  { key: 'codiceFiscale', label: lang === 'it' ? 'Codice Fiscale' : '税号' },
+                  { key: 'indirizzoFattura', label: lang === 'it' ? 'Indirizzo' : '地址', full: true },
+                  { key: 'capFattura', label: 'CAP' },
+                  { key: 'cittaFattura', label: lang === 'it' ? 'Città' : '城市' },
+                  { key: 'provinciaFattura', label: lang === 'it' ? 'Provincia' : '省份', placeholder: 'es. NA' },
+                  { key: 'codiceSdi', label: 'Codice SDI', placeholder: '7 caratteri' },
+                  { key: 'pec', label: 'PEC', placeholder: 'fattura@pec.it' },
+                ].map(f => (
+                  <div key={f.key} className={f.full ? 'sm:col-span-2' : ''}>
+                    <label className="text-xs font-medium text-gray-500 block mb-1">{f.label}</label>
+                    <input
+                      value={(profileForm as any)[f.key] || ''}
+                      onChange={e => setProfileForm(pf => ({ ...pf, [f.key]: e.target.value }))}
+                      placeholder={f.placeholder || ''}
+                      className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm text-gray-800 outline-none focus:border-orange-400 focus:ring-1 focus:ring-orange-200 transition"
+                    />
+                  </div>
+                ))}
+              </div>
+            </section>
+
+            {/* Indirizzo spedizione */}
+            <section className="bg-white rounded-2xl p-5 shadow-sm">
+              <h3 className="font-bold text-gray-800 mb-1 flex items-center gap-2">📦 {lang === 'it' ? 'Indirizzo spedizione' : '收货地址'}</h3>
+              <p className="text-xs text-gray-500 mb-4">{lang === 'it' ? 'Lascia vuoto se uguale alla fatturazione.' : '如与开票地址相同可留空。'}</p>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                {[
+                  { key: 'indirizzoSpedizione', label: lang === 'it' ? 'Indirizzo' : '地址', full: true },
+                  { key: 'capSpedizione', label: 'CAP' },
+                  { key: 'cittaSpedizione', label: lang === 'it' ? 'Città' : '城市' },
+                  { key: 'noteConsegna', label: lang === 'it' ? 'Note di consegna' : '收货备注', full: true, placeholder: lang === 'it' ? 'es. chiamare prima della consegna' : '如：请提前联系' },
+                ].map(f => (
+                  <div key={f.key} className={f.full ? 'sm:col-span-2' : ''}>
+                    <label className="text-xs font-medium text-gray-500 block mb-1">{f.label}</label>
+                    <input
+                      value={(profileForm as any)[f.key] || ''}
+                      onChange={e => setProfileForm(pf => ({ ...pf, [f.key]: e.target.value }))}
+                      placeholder={f.placeholder || ''}
+                      className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm text-gray-800 outline-none focus:border-orange-400 focus:ring-1 focus:ring-orange-200 transition"
+                    />
+                  </div>
+                ))}
+              </div>
+            </section>
+
+            {/* Contatti ordini */}
+            <section className="bg-white rounded-2xl p-5 shadow-sm">
+              <h3 className="font-bold text-gray-800 mb-4 flex items-center gap-2">📬 {lang === 'it' ? 'Contatti per ordini' : '订单联系方式'}</h3>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div className="sm:col-span-2">
+                  <label className="text-xs font-medium text-gray-500 block mb-1">{lang === 'it' ? 'Email per conferme ordine' : '接收订单确认邮箱'}</label>
+                  <input type="email" value={profileForm.emailOrdini || ''} onChange={e => setProfileForm(pf => ({ ...pf, emailOrdini: e.target.value }))}
+                    placeholder="ordini@miazienda.it"
+                    className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm text-gray-800 outline-none focus:border-orange-400 focus:ring-1 focus:ring-orange-200 transition" />
+                </div>
+                <div className="sm:col-span-2">
+                  <label className="text-xs font-medium text-gray-500 block mb-1">{lang === 'it' ? 'Numero di contatto' : '联系电话'}</label>
+                  <input type="tel" value={profileForm.telefono || ''} onChange={e => setProfileForm(pf => ({ ...pf, telefono: e.target.value }))}
+                    placeholder="+39 333 1234567"
+                    className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm text-gray-800 outline-none focus:border-orange-400 focus:ring-1 focus:ring-orange-200 transition" />
+                </div>
+              </div>
+            </section>
+
+            <button onClick={saveProfile} disabled={profileSaving}
+              className="w-full py-3.5 bg-orange-500 text-white font-semibold rounded-2xl hover:bg-orange-600 disabled:opacity-60 transition text-base">
+              {profileSaved ? t.saved : profileSaving ? t.saving : t.save}
+            </button>
           </div>
         )}
       </div>
