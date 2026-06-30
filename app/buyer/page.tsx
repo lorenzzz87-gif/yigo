@@ -18,14 +18,16 @@ export default function BuyerPage() {
   const [orders, setOrders] = useState<Awaited<ReturnType<typeof store.getOrders>>>([])
   const [toast, setToast] = useState('')
   const [placing, setPlacing] = useState(false)
-  const [unitPicker, setUnitPicker] = useState<string | null>(null) // productId showing pack/box picker
+  const [unitPicker, setUnitPicker] = useState<string | null>(null)
+  const [detailProduct, setDetailProduct] = useState<Product | null>(null)
+  const [wholesalerLogo, setWholesalerLogo] = useState<string | null>(null)
 
   useEffect(() => {
     const u = store.getCurrentUser()
     if (!u || u.role !== 'buyer') { router.replace('/login'); return }
     setUser(u)
-    Promise.all([store.getProducts(u.wholesalerId), store.getCategories(u.wholesalerId), store.getOrdersByBuyer(u.id)]).then(([p, c, o]) => {
-      setProducts(p); setCategories(c); setOrders(o)
+    Promise.all([store.getProducts(u.wholesalerId), store.getCategories(u.wholesalerId), store.getOrdersByBuyer(u.id), store.getWholesalerLogo(u.wholesalerId!)]).then(([p, c, o, logo]) => {
+      setProducts(p); setCategories(c); setOrders(o); if (logo) setWholesalerLogo(logo)
     })
   }, [router])
 
@@ -79,7 +81,7 @@ export default function BuyerPage() {
 
   return (
     <div className="min-h-screen bg-gray-50 pb-20">
-      <Navbar user={user} title="采购下单" />
+      <Navbar user={user} title="采购下单" logoUrl={wholesalerLogo || undefined} />
       {toast && <div className="fixed top-16 left-1/2 -translate-x-1/2 bg-gray-800 text-white text-sm px-4 py-2 rounded-full z-50 shadow">{toast}</div>}
       <div className="max-w-4xl mx-auto px-4 py-4">
         {tab === 'shop' && (
@@ -118,13 +120,13 @@ export default function BuyerPage() {
                 const showPicker = unitPicker === p.id
                 return (
                   <div key={p.id} className="bg-white rounded-xl p-3 shadow-sm">
-                    <div className="rounded-lg h-28 overflow-hidden bg-orange-50 flex items-center justify-center mb-2">
-                      {p.image ? <img src={p.image} alt={p.name} className="w-full h-full object-cover" /> : <span className="text-4xl">{productEmoji(p.categoryId)}</span>}
+                    <div className="rounded-lg w-full aspect-square overflow-hidden bg-orange-50 flex items-center justify-center mb-2 cursor-pointer" onClick={() => setDetailProduct(p)}>
+                      {p.image ? <img src={p.image} alt={p.name} className="w-full h-full object-contain" /> : <span className="text-4xl">{productEmoji(p.categoryId)}</span>}
                     </div>
                     <div className="font-medium text-gray-800 text-sm truncate mb-0.5">{p.name}</div>
                     <div className="flex items-center gap-2 mb-2 flex-wrap">
                       {p.subcategory && <span className="text-xs bg-orange-50 text-orange-500 px-1.5 py-0.5 rounded">{p.subcategory}</span>}
-                      <span className="text-xs text-gray-400">库存: {p.stock} {p.unit}</span>
+                      <span className="text-xs text-gray-400">库存: {p.stock} pz</span>
                       {p.videoUrl && <a href={p.videoUrl} target="_blank" rel="noreferrer" className="text-xs text-blue-500 hover:underline">🎬 视频</a>}
                     </div>
                     <div className="flex items-center justify-between">
@@ -150,8 +152,8 @@ export default function BuyerPage() {
                         </div>
                       ) : showPicker ? (
                         <div className="flex flex-col gap-1 items-end">
-                          <button onClick={() => addToCart(p.id, 'pack')} className="text-xs px-2 py-1 bg-orange-500 text-white rounded-lg font-medium">中包 {p.unit}</button>
-                          {p.boxQty && <button onClick={() => addToCart(p.id, 'box')} className="text-xs px-2 py-1 bg-orange-700 text-white rounded-lg font-medium">整箱 {p.boxQty}{p.unit}</button>}
+                          <button onClick={() => addToCart(p.id, 'pack')} className="text-xs px-2 py-1 bg-orange-500 text-white rounded-lg font-medium">中包 {p.unit} pz</button>
+                          {p.boxQty && <button onClick={() => addToCart(p.id, 'box')} className="text-xs px-2 py-1 bg-orange-700 text-white rounded-lg font-medium">整箱 {p.boxQty} pz</button>}
                           <button onClick={() => setUnitPicker(null)} className="text-xs text-gray-400">取消</button>
                         </div>
                       ) : (
@@ -231,6 +233,54 @@ export default function BuyerPage() {
           </div>
         )}
       </div>
+
+      {detailProduct && (
+        <div className="fixed inset-0 bg-black/60 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4" onClick={() => setDetailProduct(null)}>
+          <div className="bg-white w-full sm:max-w-md rounded-t-2xl sm:rounded-2xl max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
+            <div className="relative w-full bg-gray-50">
+              {detailProduct.image
+                ? <img src={detailProduct.image} alt={detailProduct.name} className="w-full object-contain max-h-72" />
+                : <div className="w-full h-48 flex items-center justify-center text-6xl">{productEmoji(detailProduct.categoryId)}</div>
+              }
+              <button onClick={() => setDetailProduct(null)} className="absolute top-3 right-3 w-8 h-8 bg-black/40 text-white rounded-full flex items-center justify-center text-lg">✕</button>
+            </div>
+            <div className="p-4">
+              <div className="font-bold text-gray-800 text-lg mb-1">{detailProduct.name}</div>
+              {detailProduct.subcategory && <span className="inline-block text-xs bg-orange-50 text-orange-500 px-2 py-0.5 rounded mb-3">{detailProduct.subcategory}</span>}
+              <div className="text-2xl font-bold text-orange-500 mb-3">€{detailProduct.price.toFixed(2)}</div>
+              <div className="grid grid-cols-2 gap-2 text-sm mb-3">
+                <div className="bg-gray-50 rounded-lg p-2">
+                  <div className="text-gray-400 text-xs mb-0.5">中包装</div>
+                  <div className="font-medium">{detailProduct.unit} pz</div>
+                </div>
+                {detailProduct.boxQty && (
+                  <div className="bg-gray-50 rounded-lg p-2">
+                    <div className="text-gray-400 text-xs mb-0.5">装箱数</div>
+                    <div className="font-medium">{detailProduct.boxQty} pz</div>
+                  </div>
+                )}
+                <div className="bg-gray-50 rounded-lg p-2">
+                  <div className="text-gray-400 text-xs mb-0.5">库存</div>
+                  <div className="font-medium">{detailProduct.stock} pz</div>
+                </div>
+                {detailProduct.barcode && (
+                  <div className="bg-gray-50 rounded-lg p-2">
+                    <div className="text-gray-400 text-xs mb-0.5">条形码</div>
+                    <div className="font-medium text-xs">{detailProduct.barcode}</div>
+                  </div>
+                )}
+              </div>
+              {detailProduct.description && <div className="text-sm text-gray-500 mb-3">{detailProduct.description}</div>}
+              {detailProduct.videoUrl && <a href={detailProduct.videoUrl} target="_blank" rel="noreferrer" className="block text-sm text-blue-500 hover:underline mb-3">🎬 查看产品视频</a>}
+              <button
+                onClick={() => { detailProduct.boxQty ? setUnitPicker(detailProduct.id) : addToCart(detailProduct.id, 'pack'); setDetailProduct(null) }}
+                className="w-full py-3 bg-orange-500 text-white rounded-xl font-semibold hover:bg-orange-600">
+                加入购物车
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       <div className="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 flex">
         {[{ key: 'shop', label: '选购', icon: '🛍️' }, { key: 'cart', label: `购物车${cart.length > 0 ? `(${cart.length})` : ''}`, icon: '🛒' }, { key: 'orders', label: '我的订单', icon: '📋' }].map(t => (

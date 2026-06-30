@@ -344,6 +344,16 @@ export const store = {
   async deleteProduct(id: string) {
     await supabase.from('products').delete().eq('id', id)
   },
+  async clearAllWholesalerData(wholesalerId: string) {
+    // Delete all storage images
+    const { data: files } = await supabase.storage.from('product-images').list(wholesalerId, { limit: 1000 })
+    if (files && files.length > 0) {
+      const paths = files.map(f => `${wholesalerId}/${f.name}`)
+      await supabase.storage.from('product-images').remove(paths)
+    }
+    await supabase.from('products').delete().eq('wholesaler_id', wholesalerId)
+    await supabase.from('categories').delete().eq('wholesaler_id', wholesalerId)
+  },
 
   // Cart (localStorage)
   getCart(): CartItem[] { return load('yg_cart', []) },

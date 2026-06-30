@@ -36,7 +36,10 @@ export default function Navbar({ user, title, backHref, logoUrl, onLogoUpload }:
           <span className="text-gray-700 font-medium">{title}</span>
         </div>
         <div className="flex items-center gap-3">
-          {/* Wholesaler logo upload / display */}
+          {/* Wholesaler logo — upload (wholesaler) or display-only (buyer) */}
+          {logoUrl && !onLogoUpload && (
+            <img src={logoUrl} alt="logo" className="h-8 w-auto max-w-[80px] object-contain" />
+          )}
           {onLogoUpload && (
             <>
               {logoUrl ? (

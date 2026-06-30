@@ -29,6 +29,7 @@ export default function WholesalerPage() {
   const [search, setSearch] = useState('')
   const [saving, setSaving] = useState(false)
   const [exporting, setExporting] = useState(false)
+  const [clearing, setClearing] = useState(false)
   const [toast, setToast] = useState('')
   const [logoUrl, setLogoUrl] = useState<string | null>(null)
   const [uploadingLogo, setUploadingLogo] = useState(false)
@@ -134,6 +135,17 @@ export default function WholesalerPage() {
   async function addCategory() {
     if (!newCatName.trim()) return
     await store.addCategory(newCatName.trim(), wid); setNewCatName(''); refreshData(wid)
+  }
+
+  async function clearAllData() {
+    if (!confirm('确认清除所有商品、分类和图片？此操作不可恢复！')) return
+    setClearing(true)
+    try {
+      await store.clearAllWholesalerData(wid)
+      showToast('已清除所有数据')
+      refreshData(wid)
+    } catch (e: any) { showToast('清除失败: ' + e.message) }
+    setClearing(false)
   }
 
   async function handleExportAll() {
@@ -298,11 +310,19 @@ export default function WholesalerPage() {
         )}
 
         {tab === 'import' && (
-          <BulkImport
-            wholesalerId={wid}
-            categories={categories}
-            onDone={() => { setTab('products'); refreshData(wid) }}
-          />
+          <div>
+            <div className="flex justify-end mb-3">
+              <button onClick={clearAllData} disabled={clearing}
+                className="flex items-center gap-2 px-4 py-2 bg-red-500 text-white text-sm rounded-lg hover:bg-red-600 disabled:opacity-60">
+                {clearing ? '清除中…' : '🗑️ 一键清除所有数据'}
+              </button>
+            </div>
+            <BulkImport
+              wholesalerId={wid}
+              categories={categories}
+              onDone={() => { setTab('products'); refreshData(wid) }}
+            />
+          </div>
         )}
 
         {tab === 'invites' && (
