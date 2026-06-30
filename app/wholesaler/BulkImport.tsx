@@ -115,8 +115,16 @@ export default function BulkImport({ wholesalerId, categories, onDone }: Props) 
   async function doMatch() {
     if (rows.length === 0) return
 
-    // Categories come from Excel E column only. ZIP folder names are only for image file matching.
+    // Pre-create all unique categories sequentially to avoid race-condition duplicates.
+    // ZIP folder names are only for image file matching, never for category creation.
     const localCats = [...categories]
+    const uniqueCatNames = [...new Set(rows.map(r => r.categoryName).filter(Boolean) as string[])]
+    for (const name of uniqueCatNames) {
+      if (!localCats.find(c => c.name === name)) {
+        const nc = await store.addCategory(name, wholesalerId)
+        localCats.push(nc)
+      }
+    }
 
     const matched = await Promise.all(rows.map(async row => {
       const skuK     = barcodeKey(row.sku)
@@ -127,15 +135,11 @@ export default function BulkImport({ wholesalerId, categories, onDone }: Props) 
         if ((skuK && key === skuK) || (barcodeK && key === barcodeK) || key === nameK) { zipImg = zi; break }
       }
 
-      // Category from Excel E column only
+      // Category from Excel E column only (already created above)
       let categoryId = row.categoryId
       if (!categoryId && row.categoryName) {
-        let cat = localCats.find(c => c.name === row.categoryName)
-        if (!cat) {
-          cat = await store.addCategory(row.categoryName!, wholesalerId)
-          localCats.push(cat)
-        }
-        categoryId = cat.id
+        const cat = localCats.find(c => c.name === row.categoryName)
+        if (cat) categoryId = cat.id
       }
 
       if (zipImg?.blob) {
