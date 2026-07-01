@@ -1,6 +1,7 @@
 'use client'
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
+import { User as UserIcon, Mail, Phone, Lock, KeyRound, CheckCircle2, AlertCircle, ArrowLeft } from 'lucide-react'
 import { store } from '@/lib/store'
 
 export default function B2BLoginPage() {
@@ -105,7 +106,7 @@ export default function B2BLoginPage() {
             ]).map((f, i) => (
               <div key={i} className="flex items-center gap-3">
                 <div className={`w-5 h-5 rounded-full flex items-center justify-center shrink-0 ${isBuyer ? 'bg-orange-500/20' : 'bg-amber-500/20'}`}>
-                  <div className={`w-2 h-2 rounded-full ${isBuyer ? 'bg-orange-400' : 'bg-amber-400'}`} />
+                  <CheckCircle2 className={`w-3.5 h-3.5 ${isBuyer ? 'text-orange-400' : 'text-amber-400'}`} strokeWidth={2} />
                 </div>
                 <span className="text-gray-500 text-sm">{f}</span>
               </div>
@@ -114,8 +115,9 @@ export default function B2BLoginPage() {
         </div>
 
         <div className="flex items-center gap-4">
-          <button onClick={() => router.push('/entry')} className="text-xs text-gray-500 hover:text-gray-300 transition-colors">
-            ← Torna alla selezione · 返回选择
+          <button onClick={() => router.push('/entry')} className="flex items-center gap-1.5 text-xs text-gray-500 hover:text-gray-300 transition-colors">
+            <ArrowLeft className="w-3.5 h-3.5" strokeWidth={1.75} />
+            Torna alla selezione · 返回选择
           </button>
           <span className="text-gray-700 text-xs">yigo.eu</span>
         </div>
@@ -128,7 +130,9 @@ export default function B2BLoginPage() {
           {/* Mobile logo */}
           <div className="lg:hidden mb-8 text-center">
             <img src="/logo.svg" alt="Yigo" className="h-12 w-auto mx-auto mb-2" />
-            <button onClick={() => router.push('/entry')} className={`text-xs ${accentText}`}>← 返回选择身份</button>
+            <button onClick={() => router.push('/entry')} className={`inline-flex items-center gap-1 text-xs ${accentText}`}>
+              <ArrowLeft className="w-3.5 h-3.5" strokeWidth={1.75} /> 返回选择身份
+            </button>
           </div>
 
           <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-8">
@@ -144,19 +148,28 @@ export default function B2BLoginPage() {
             </div>
 
             {success && (
-              <div className="mb-5 text-sm text-green-700 bg-green-50 border border-green-200 rounded-xl px-4 py-3">{success}</div>
+              <div className="mb-5 flex items-start gap-2 text-sm text-green-700 bg-green-50 border border-green-200 rounded-xl px-4 py-3">
+                <CheckCircle2 className="w-4 h-4 mt-0.5 shrink-0" strokeWidth={1.75} />
+                {success}
+              </div>
             )}
             {error && (
-              <div className="mb-5 text-sm text-red-600 bg-red-50 border border-red-200 rounded-xl px-4 py-3">{error}</div>
+              <div className="mb-5 flex items-start gap-2 text-sm text-red-600 bg-red-50 border border-red-200 rounded-xl px-4 py-3">
+                <AlertCircle className="w-4 h-4 mt-0.5 shrink-0" strokeWidth={1.75} />
+                {error}
+              </div>
             )}
 
             <div className="space-y-4">
               {mode === 'register' && (
                 <div>
                   <label className="text-xs font-medium text-gray-500 block mb-1.5">姓名 / Nome negozio</label>
-                  <input value={name} onChange={e => setName(e.target.value)}
-                    placeholder="您的姓名或店铺名"
-                    className={`w-full border border-gray-200 rounded-xl px-4 py-3 text-sm outline-none focus:ring-2 ${accentBorder} transition text-gray-900 placeholder:text-gray-300`} />
+                  <div className="relative">
+                    <UserIcon className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-300" strokeWidth={1.75} />
+                    <input value={name} onChange={e => setName(e.target.value)}
+                      placeholder="您的姓名或店铺名"
+                      className={`w-full border border-gray-200 rounded-xl pl-10 pr-4 py-3 text-sm outline-none focus:ring-2 ${accentBorder} transition text-gray-900 placeholder:text-gray-300`} />
+                  </div>
                 </div>
               )}
 
@@ -172,17 +185,22 @@ export default function B2BLoginPage() {
                       {loginMethod === 'email' ? '用手机号登录' : '用邮箱登录'}
                     </button>
                   </div>
-                  {loginMethod === 'email' ? (
-                    <input value={email} onChange={e => setEmail(e.target.value)} type="email"
-                      placeholder="name@example.com"
-                      onKeyDown={e => e.key === 'Enter' && handleLogin()}
-                      className={`w-full border border-gray-200 rounded-xl px-4 py-3 text-sm outline-none focus:ring-2 ${accentBorder} transition text-gray-900 placeholder:text-gray-300`} />
-                  ) : (
-                    <input value={phone} onChange={e => setPhone(e.target.value)} type="tel"
-                      placeholder="+39 ..."
-                      onKeyDown={e => e.key === 'Enter' && handleLogin()}
-                      className={`w-full border border-gray-200 rounded-xl px-4 py-3 text-sm outline-none focus:ring-2 ${accentBorder} transition text-gray-900 placeholder:text-gray-300`} />
-                  )}
+                  <div className="relative">
+                    {loginMethod === 'email'
+                      ? <Mail className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-300" strokeWidth={1.75} />
+                      : <Phone className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-300" strokeWidth={1.75} />}
+                    {loginMethod === 'email' ? (
+                      <input value={email} onChange={e => setEmail(e.target.value)} type="email"
+                        placeholder="name@example.com"
+                        onKeyDown={e => e.key === 'Enter' && handleLogin()}
+                        className={`w-full border border-gray-200 rounded-xl pl-10 pr-4 py-3 text-sm outline-none focus:ring-2 ${accentBorder} transition text-gray-900 placeholder:text-gray-300`} />
+                    ) : (
+                      <input value={phone} onChange={e => setPhone(e.target.value)} type="tel"
+                        placeholder="+39 ..."
+                        onKeyDown={e => e.key === 'Enter' && handleLogin()}
+                        className={`w-full border border-gray-200 rounded-xl pl-10 pr-4 py-3 text-sm outline-none focus:ring-2 ${accentBorder} transition text-gray-900 placeholder:text-gray-300`} />
+                    )}
+                  </div>
                 </div>
               )}
 
@@ -191,36 +209,51 @@ export default function B2BLoginPage() {
                 <>
                   <div>
                     <label className="text-xs font-medium text-gray-500 block mb-1.5">Email · 邮箱 <span className="text-gray-500">(推荐)</span></label>
-                    <input value={email} onChange={e => setEmail(e.target.value)} type="email"
-                      placeholder="name@example.com"
-                      className={`w-full border border-gray-200 rounded-xl px-4 py-3 text-sm outline-none focus:ring-2 ${accentBorder} transition text-gray-900 placeholder:text-gray-300`} />
+                    <div className="relative">
+                      <Mail className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-300" strokeWidth={1.75} />
+                      <input value={email} onChange={e => setEmail(e.target.value)} type="email"
+                        placeholder="name@example.com"
+                        className={`w-full border border-gray-200 rounded-xl pl-10 pr-4 py-3 text-sm outline-none focus:ring-2 ${accentBorder} transition text-gray-900 placeholder:text-gray-300`} />
+                    </div>
                   </div>
                   <div>
                     <label className="text-xs font-medium text-gray-500 block mb-1.5">Telefono · 手机号 <span className="text-gray-500">(选填)</span></label>
-                    <input value={phone} onChange={e => setPhone(e.target.value)} type="tel"
-                      placeholder="+39 ..."
-                      className={`w-full border border-gray-200 rounded-xl px-4 py-3 text-sm outline-none focus:ring-2 ${accentBorder} transition text-gray-900 placeholder:text-gray-300`} />
+                    <div className="relative">
+                      <Phone className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-300" strokeWidth={1.75} />
+                      <input value={phone} onChange={e => setPhone(e.target.value)} type="tel"
+                        placeholder="+39 ..."
+                        className={`w-full border border-gray-200 rounded-xl pl-10 pr-4 py-3 text-sm outline-none focus:ring-2 ${accentBorder} transition text-gray-900 placeholder:text-gray-300`} />
+                    </div>
                   </div>
                 </>
               )}
 
               <div>
                 <label className="text-xs font-medium text-gray-500 block mb-1.5">Password · 密码</label>
-                <input value={password} onChange={e => setPassword(e.target.value)} type="password"
-                  placeholder={mode === 'register' ? '至少6位' : '请输入密码'}
-                  onKeyDown={e => e.key === 'Enter' && mode === 'login' && handleLogin()}
-                  className={`w-full border border-gray-200 rounded-xl px-4 py-3 text-sm outline-none focus:ring-2 ${accentBorder} transition text-gray-900 placeholder:text-gray-300`} />
+                <div className="relative">
+                  <Lock className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-300" strokeWidth={1.75} />
+                  <input value={password} onChange={e => setPassword(e.target.value)} type="password"
+                    placeholder={mode === 'register' ? '至少6位' : '请输入密码'}
+                    onKeyDown={e => e.key === 'Enter' && mode === 'login' && handleLogin()}
+                    className={`w-full border border-gray-200 rounded-xl pl-10 pr-4 py-3 text-sm outline-none focus:ring-2 ${accentBorder} transition text-gray-900 placeholder:text-gray-300`} />
+                </div>
               </div>
 
               {mode === 'register' && (
                 <div className="bg-gray-50 rounded-xl p-4 space-y-3 border border-gray-100">
                   <div className="text-xs text-gray-500 font-medium">向批发商索取的商家号 + 临时密码</div>
-                  <input value={inviteCode} onChange={e => setInviteCode(e.target.value)}
-                    placeholder="商家号，如 M123456"
-                    className={`w-full border border-gray-200 rounded-xl px-4 py-2.5 text-sm outline-none focus:ring-2 ${accentBorder} bg-white transition`} />
-                  <input value={inviteTempPwd} onChange={e => setInviteTempPwd(e.target.value)}
-                    placeholder="临时密码"
-                    className={`w-full border border-gray-200 rounded-xl px-4 py-2.5 text-sm outline-none focus:ring-2 ${accentBorder} bg-white transition`} />
+                  <div className="relative">
+                    <KeyRound className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-300" strokeWidth={1.75} />
+                    <input value={inviteCode} onChange={e => setInviteCode(e.target.value)}
+                      placeholder="商家号，如 M123456"
+                      className={`w-full border border-gray-200 rounded-xl pl-10 pr-4 py-2.5 text-sm outline-none focus:ring-2 ${accentBorder} bg-white transition`} />
+                  </div>
+                  <div className="relative">
+                    <Lock className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-300" strokeWidth={1.75} />
+                    <input value={inviteTempPwd} onChange={e => setInviteTempPwd(e.target.value)}
+                      placeholder="临时密码"
+                      className={`w-full border border-gray-200 rounded-xl pl-10 pr-4 py-2.5 text-sm outline-none focus:ring-2 ${accentBorder} bg-white transition`} />
+                  </div>
                 </div>
               )}
             </div>

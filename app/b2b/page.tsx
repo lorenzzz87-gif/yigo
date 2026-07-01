@@ -1,6 +1,20 @@
 'use client'
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
+import {
+  Search,
+  ShoppingCart,
+  Package,
+  X,
+  ChevronDown,
+  Receipt,
+  Truck,
+  Mail,
+  PlayCircle,
+  CheckCircle2,
+  LogOut,
+  ClipboardList,
+} from 'lucide-react'
 import { store, User, Product, Category, Order, BuyerProfile } from '@/lib/store'
 
 type Lang = 'it' | 'zh'
@@ -24,6 +38,7 @@ export default function B2BPage() {
   const [lang, setLang] = useState<Lang>('it')
   const [view, setView] = useState<'catalog' | 'orders' | 'profilo'>('catalog')
   const [products, setProducts] = useState<Product[]>([])
+  const [productsLoading, setProductsLoading] = useState(true)
   const [productTotal, setProductTotal] = useState(0)
   const [productPage, setProductPage] = useState(0)
   const PAGE_SIZE = 60
@@ -67,11 +82,12 @@ export default function B2BPage() {
   }, [router])
 
   async function loadProducts(wid: string | undefined, q: string, page: number, catId?: string, subcat?: string) {
+    setProductsLoading(true)
     const [prods, total] = await Promise.all([
       store.getProducts(wid, q || undefined, PAGE_SIZE, page * PAGE_SIZE, catId, subcat),
       store.countProducts(wid, catId, subcat),
     ])
-    setProducts(prods); setProductTotal(total); setProductPage(page)
+    setProducts(prods); setProductTotal(total); setProductPage(page); setProductsLoading(false)
   }
 
   async function selectCategory(catId: string) {
@@ -157,7 +173,12 @@ export default function B2BPage() {
 
   return (
     <div className="min-h-screen bg-gray-50">
-      {toast && <div className="fixed top-20 left-1/2 -translate-x-1/2 bg-gray-900 text-white text-sm px-5 py-2.5 rounded-full z-[60] shadow-lg">{toast}</div>}
+      {toast && (
+        <div className="fixed top-20 left-1/2 -translate-x-1/2 bg-gray-900 text-white text-sm px-5 py-2.5 rounded-full z-[60] shadow-lg flex items-center gap-2">
+          <CheckCircle2 className="w-4 h-4 text-green-400" strokeWidth={1.75} />
+          {toast}
+        </div>
+      )}
 
       {/* Header */}
       <header className="sticky top-0 z-40 bg-white border-b border-gray-200">
@@ -174,7 +195,7 @@ export default function B2BPage() {
                 onKeyDown={e => e.key === 'Enter' && runSearch()}
                 placeholder={t.search}
                 className="w-full bg-gray-100 rounded-full pl-11 pr-4 py-2.5 text-sm outline-none focus:bg-white focus:ring-2 focus:ring-orange-300 transition" />
-              <span className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400">🔍</span>
+              <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" strokeWidth={1.75} />
             </div>
           </div>
 
@@ -183,12 +204,16 @@ export default function B2BPage() {
               <button onClick={() => switchLang('it')} className={`px-3 py-1 rounded-full ${lang === 'it' ? 'bg-white shadow text-orange-600' : 'text-gray-500'}`}>IT</button>
               <button onClick={() => switchLang('zh')} className={`px-3 py-1 rounded-full ${lang === 'zh' ? 'bg-white shadow text-orange-600' : 'text-gray-500'}`}>中</button>
             </div>
-            <button onClick={() => setCartOpen(true)} className="relative px-4 py-2 bg-orange-500 text-white rounded-full text-sm font-medium hover:bg-orange-600">
-              🛒 {t.cart}
+            <button onClick={() => setCartOpen(true)} className="relative flex items-center gap-1.5 px-4 py-2 bg-orange-500 text-white rounded-full text-sm font-medium hover:bg-orange-600 transition-colors">
+              <ShoppingCart className="w-4 h-4" strokeWidth={1.75} />
+              {t.cart}
               {cartCount > 0 && <span className="absolute -top-1.5 -right-1.5 bg-red-500 text-white text-xs w-5 h-5 rounded-full flex items-center justify-center">{cartCount}</span>}
             </button>
             <div className="text-sm text-gray-600 hidden md:block">{user.name}</div>
-            <button onClick={logout} className="text-sm text-gray-400 hover:text-red-500">{t.logout}</button>
+            <button onClick={logout} className="flex items-center gap-1 text-sm text-gray-400 hover:text-red-500 transition-colors">
+              <LogOut className="w-3.5 h-3.5" strokeWidth={1.75} />
+              {t.logout}
+            </button>
           </div>
         </div>
 
@@ -218,7 +243,7 @@ export default function B2BPage() {
                     <button onClick={() => selectCategory(c.id)}
                       className={`w-full text-left px-4 py-2.5 rounded-lg text-sm font-medium mb-0.5 flex items-center justify-between ${selectedCat === c.id ? 'bg-orange-50 text-orange-600' : 'text-gray-600 hover:bg-gray-50'}`}>
                       <span className="truncate">{c.name}</span>
-                      {selectedCat === c.id && subcategories.length > 0 && <span className="text-xs shrink-0 ml-1">▾</span>}
+                      {selectedCat === c.id && subcategories.length > 0 && <ChevronDown className="w-3.5 h-3.5 shrink-0 ml-1" strokeWidth={2} />}
                     </button>
                     {selectedCat === c.id && subcategories.length > 0 && (
                       <div className="ml-3 mb-1 border-l-2 border-orange-100 pl-2">
@@ -240,8 +265,26 @@ export default function B2BPage() {
               <div className="text-xs text-gray-400 mb-3">
                 {productTotal} {t.items}，{productPage * PAGE_SIZE + 1}–{Math.min((productPage + 1) * PAGE_SIZE, productTotal)}
               </div>
-              {products.length === 0 ? (
-                <div className="text-center text-gray-400 py-24">{t.noProducts}</div>
+              {productsLoading ? (
+                <div className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+                  {Array.from({ length: 8 }).map((_, i) => (
+                    <div key={i} className="bg-white rounded-xl shadow-sm overflow-hidden animate-pulse">
+                      <div className="w-full aspect-square bg-gray-100" />
+                      <div className="p-3 space-y-2">
+                        <div className="h-3.5 bg-gray-100 rounded w-4/5" />
+                        <div className="h-3.5 bg-gray-100 rounded w-2/5" />
+                        <div className="h-5 bg-gray-100 rounded w-1/3 mt-3" />
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : products.length === 0 ? (
+                <div className="flex flex-col items-center justify-center py-24 text-center">
+                  <div className="w-12 h-12 rounded-full bg-gray-100 flex items-center justify-center mb-3">
+                    <Package className="w-6 h-6 text-gray-300" strokeWidth={1.5} />
+                  </div>
+                  <div className="text-gray-400 text-sm">{t.noProducts}</div>
+                </div>
               ) : (
                 <div className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
                   {products.map(p => {
@@ -251,14 +294,18 @@ export default function B2BPage() {
                     return (
                       <div key={p.id} className="bg-white rounded-xl shadow-sm overflow-hidden hover:shadow-md transition flex flex-col">
                         <div className="w-full aspect-square bg-orange-50 flex items-center justify-center cursor-pointer" onClick={() => setDetailProduct(p)}>
-                          {p.image ? <img src={p.image} alt={p.name} className="w-full h-full object-contain" /> : <span className="text-5xl">📦</span>}
+                          {p.image ? <img src={p.image} alt={p.name} className="w-full h-full object-contain" /> : <Package className="w-10 h-10 text-orange-200" strokeWidth={1.5} />}
                         </div>
                         <div className="p-3 flex flex-col flex-1">
                           <div className="font-medium text-gray-800 text-sm mb-1 line-clamp-2 min-h-[2.5rem]">{p.name}</div>
                           <div className="flex items-center gap-2 mb-2 flex-wrap">
                             {p.subcategory && <span className="text-xs bg-orange-50 text-orange-500 px-1.5 py-0.5 rounded">{p.subcategory}</span>}
                             <span className="text-xs text-gray-400">{t.stock}: {p.stock} pz</span>
-                            {p.videoUrl && <a href={p.videoUrl} target="_blank" rel="noreferrer" className="text-xs text-blue-500 hover:underline">🎬 Video</a>}
+                            {p.videoUrl && (
+                              <a href={p.videoUrl} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-xs text-blue-500 hover:underline">
+                                <PlayCircle className="w-3.5 h-3.5" strokeWidth={1.75} /> Video
+                              </a>
+                            )}
                           </div>
                           <div className="mt-auto flex items-center justify-between">
                             <span className="font-bold text-orange-500 text-lg">€{p.price.toFixed(2)}</span>
@@ -291,7 +338,7 @@ export default function B2BPage() {
                                     {lang === 'it' ? `Cartone ${p.boxQty} pz` : `整箱 ${p.boxQty} pz`}
                                   </button>
                                 )}
-                                <button onClick={() => setUnitPicker(null)} className="text-xs text-gray-400">✕</button>
+                                <button onClick={() => setUnitPicker(null)} className="text-xs text-gray-400 hover:text-gray-600 inline-flex items-center gap-0.5"><X className="w-3 h-3" strokeWidth={2} /></button>
                               </div>
                             ) : (
                               <button onClick={() => p.boxQty ? setUnitPicker(p.id) : addToCart(p.id, 'pack')} className="px-3 py-1.5 bg-orange-500 text-white rounded-lg text-xs font-medium hover:bg-orange-600">+ {t.addToCart}</button>
@@ -319,7 +366,12 @@ export default function B2BPage() {
         {view === 'orders' && (
           <div className="max-w-3xl">
             {orders.length === 0 ? (
-              <div className="text-center text-gray-400 py-24">{t.noOrders}</div>
+              <div className="flex flex-col items-center justify-center py-24 text-center">
+                <div className="w-12 h-12 rounded-full bg-gray-100 flex items-center justify-center mb-3">
+                  <ClipboardList className="w-6 h-6 text-gray-300" strokeWidth={1.5} />
+                </div>
+                <div className="text-gray-400 text-sm">{t.noOrders}</div>
+              </div>
             ) : (
               <div className="space-y-3">
                 {orders.map(o => (
@@ -353,7 +405,7 @@ export default function B2BPage() {
 
             {/* Dati fatturazione */}
             <section className="bg-white rounded-2xl p-5 shadow-sm">
-              <h3 className="font-bold text-gray-800 mb-4 flex items-center gap-2">🧾 {lang === 'it' ? 'Dati fatturazione' : '开票信息'}</h3>
+              <h3 className="font-bold text-gray-800 mb-4 flex items-center gap-2"><Receipt className="w-4 h-4 text-orange-500" strokeWidth={1.75} /> {lang === 'it' ? 'Dati fatturazione' : '开票信息'}</h3>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 {[
                   { key: 'ragioneSociale', label: lang === 'it' ? 'Ragione Sociale' : '公司名称', full: true },
@@ -381,7 +433,7 @@ export default function B2BPage() {
 
             {/* Indirizzo spedizione */}
             <section className="bg-white rounded-2xl p-5 shadow-sm">
-              <h3 className="font-bold text-gray-800 mb-1 flex items-center gap-2">📦 {lang === 'it' ? 'Indirizzo spedizione' : '收货地址'}</h3>
+              <h3 className="font-bold text-gray-800 mb-1 flex items-center gap-2"><Truck className="w-4 h-4 text-orange-500" strokeWidth={1.75} /> {lang === 'it' ? 'Indirizzo spedizione' : '收货地址'}</h3>
               <p className="text-xs text-gray-500 mb-4">{lang === 'it' ? 'Lascia vuoto se uguale alla fatturazione.' : '如与开票地址相同可留空。'}</p>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 {[
@@ -405,7 +457,7 @@ export default function B2BPage() {
 
             {/* Contatti ordini */}
             <section className="bg-white rounded-2xl p-5 shadow-sm">
-              <h3 className="font-bold text-gray-800 mb-4 flex items-center gap-2">📬 {lang === 'it' ? 'Contatti per ordini' : '订单联系方式'}</h3>
+              <h3 className="font-bold text-gray-800 mb-4 flex items-center gap-2"><Mail className="w-4 h-4 text-orange-500" strokeWidth={1.75} /> {lang === 'it' ? 'Contatti per ordini' : '订单联系方式'}</h3>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div className="sm:col-span-2">
                   <label className="text-xs font-medium text-gray-500 block mb-1">{lang === 'it' ? 'Email per conferme ordine' : '接收订单确认邮箱'}</label>
@@ -437,9 +489,9 @@ export default function B2BPage() {
             <div className="relative bg-gray-50 flex items-center justify-center" style={{minHeight: '280px'}}>
               {detailProduct.image
                 ? <img src={detailProduct.image} alt={detailProduct.name} className="w-full object-contain max-h-72" />
-                : <span className="text-7xl">📦</span>
+                : <Package className="w-16 h-16 text-gray-300" strokeWidth={1.5} />
               }
-              <button onClick={() => setDetailProduct(null)} className="absolute top-3 right-3 w-8 h-8 bg-black/40 text-white rounded-full flex items-center justify-center text-lg">✕</button>
+              <button onClick={() => setDetailProduct(null)} className="absolute top-3 right-3 w-8 h-8 bg-black/40 text-white rounded-full flex items-center justify-center hover:bg-black/60 transition-colors"><X className="w-4 h-4" strokeWidth={2} /></button>
             </div>
             <div className="p-5 overflow-y-auto">
               <div className="font-bold text-gray-800 text-xl mb-1">{detailProduct.name}</div>
@@ -468,7 +520,11 @@ export default function B2BPage() {
                 )}
               </div>
               {detailProduct.description && <div className="text-sm text-gray-500 mb-4">{detailProduct.description}</div>}
-              {detailProduct.videoUrl && <a href={detailProduct.videoUrl} target="_blank" rel="noreferrer" className="block text-sm text-blue-500 hover:underline mb-4">🎬 {lang === 'it' ? 'Guarda il video' : '查看产品视频'}</a>}
+              {detailProduct.videoUrl && (
+                <a href={detailProduct.videoUrl} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1.5 text-sm text-blue-500 hover:underline mb-4">
+                  <PlayCircle className="w-4 h-4" strokeWidth={1.75} /> {lang === 'it' ? 'Guarda il video' : '查看产品视频'}
+                </a>
+              )}
               <button
                 onClick={() => { detailProduct.boxQty ? setUnitPicker(detailProduct.id) : addToCart(detailProduct.id, 'pack'); setDetailProduct(null) }}
                 className="w-full py-3.5 bg-orange-500 text-white rounded-xl font-semibold hover:bg-orange-600 text-lg">
@@ -486,11 +542,16 @@ export default function B2BPage() {
           <div className="relative w-full max-w-md bg-white h-full shadow-xl flex flex-col">
             <div className="flex items-center justify-between px-5 h-16 border-b border-gray-200 shrink-0">
               <h3 className="font-bold text-gray-800">{t.cart}</h3>
-              <button onClick={() => setCartOpen(false)} className="w-8 h-8 rounded-full hover:bg-gray-100 flex items-center justify-center text-gray-500">✕</button>
+              <button onClick={() => setCartOpen(false)} className="w-8 h-8 rounded-full hover:bg-gray-100 flex items-center justify-center text-gray-500 transition-colors"><X className="w-4 h-4" strokeWidth={2} /></button>
             </div>
 
             {cart.length === 0 ? (
-              <div className="flex-1 flex items-center justify-center text-gray-400">{t.empty}</div>
+              <div className="flex-1 flex flex-col items-center justify-center text-gray-400 gap-3">
+                <div className="w-12 h-12 rounded-full bg-gray-100 flex items-center justify-center">
+                  <ShoppingCart className="w-6 h-6 text-gray-300" strokeWidth={1.5} />
+                </div>
+                <span className="text-sm">{t.empty}</span>
+              </div>
             ) : (
               <>
                 <div className="flex-1 overflow-y-auto p-5 space-y-3">
@@ -503,7 +564,7 @@ export default function B2BPage() {
                     return (
                       <div key={`${item.productId}_${item.orderUnit}_${idx}`} className="flex items-center gap-3 bg-gray-50 rounded-xl p-3">
                         <div className="w-14 h-14 rounded-lg overflow-hidden bg-white flex items-center justify-center shrink-0">
-                          {p.image ? <img src={p.image} alt={p.name} className="w-full h-full object-cover" /> : <span className="text-2xl">📦</span>}
+                          {p.image ? <img src={p.image} alt={p.name} className="w-full h-full object-cover" /> : <Package className="w-6 h-6 text-gray-300" strokeWidth={1.5} />}
                         </div>
                         <div className="flex-1 min-w-0">
                           <div className="font-medium text-gray-800 text-sm truncate">{p.name}</div>
