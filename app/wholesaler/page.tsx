@@ -499,51 +499,50 @@ export default function WholesalerPage() {
                       <div className="absolute bottom-0 left-0 right-0 bg-orange-500 text-white text-[10px] text-center py-0.5">待上传</div>
                     </div>
                   ))}
-                  {/* add button */}
-                  <button onClick={() => extraImgRef.current?.click()}
-                    className="w-20 h-20 border-2 border-dashed border-gray-200 rounded-lg flex flex-col items-center justify-center text-gray-400 hover:border-orange-400 hover:text-orange-400 transition-colors shrink-0 text-2xl">
+                  {/* add button — label直接触发input，比programmatic click更可靠 */}
+                  <label className="w-20 h-20 border-2 border-dashed border-gray-200 rounded-lg flex flex-col items-center justify-center text-gray-500 hover:border-orange-400 hover:text-orange-400 transition-colors shrink-0 text-2xl cursor-pointer">
                     +
-                  </button>
+                    <input type="file" accept="image/*" multiple className="hidden"
+                      onChange={e => { setNewExtraFiles(fs => [...fs, ...Array.from(e.target.files || [])]); e.target.value = '' }} />
+                  </label>
                 </div>
-                <input ref={extraImgRef} type="file" accept="image/*" multiple className="hidden"
-                  onChange={e => { setNewExtraFiles(fs => [...fs, ...Array.from(e.target.files || [])]); e.target.value = '' }} />
               </div>
 
               <div>
                 <label className="text-sm text-gray-500 mb-1 block">商品名称 *</label>
-                <input value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm outline-none focus:border-orange-400" />
+                <input value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-800 outline-none focus:border-orange-400" />
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="text-sm text-gray-500 mb-1 block">分类</label>
-                  <select value={form.categoryId} onChange={e => setForm({ ...form, categoryId: e.target.value })} className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm outline-none focus:border-orange-400">
+                  <select value={form.categoryId} onChange={e => setForm({ ...form, categoryId: e.target.value })} className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-800 outline-none focus:border-orange-400">
                     {categories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
                   </select>
                 </div>
                 <div>
                   <label className="text-sm text-gray-500 mb-1 block">单位</label>
-                  <input value={form.unit} onChange={e => setForm({ ...form, unit: e.target.value })} className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm outline-none focus:border-orange-400" />
+                  <input value={form.unit} onChange={e => setForm({ ...form, unit: e.target.value })} className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-800 outline-none focus:border-orange-400" />
                 </div>
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="text-sm text-gray-500 mb-1 block">价格 (€) *</label>
-                  <input type="number" step="0.01" value={form.price} onChange={e => setForm({ ...form, price: e.target.value })} className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm outline-none focus:border-orange-400" />
+                  <input type="number" step="0.01" value={form.price} onChange={e => setForm({ ...form, price: e.target.value })} className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-800 outline-none focus:border-orange-400" />
                 </div>
                 <div>
                   <label className="text-sm text-gray-500 mb-1 block">库存</label>
-                  <input type="number" value={form.stock} onChange={e => setForm({ ...form, stock: e.target.value })} className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm outline-none focus:border-orange-400" />
+                  <input type="number" value={form.stock} onChange={e => setForm({ ...form, stock: e.target.value })} className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-800 outline-none focus:border-orange-400" />
                 </div>
               </div>
               <div>
                 <label className="text-sm text-gray-500 mb-1 block">条形码</label>
-                <input value={form.barcode} onChange={e => setForm({ ...form, barcode: e.target.value })} className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm outline-none focus:border-orange-400" />
+                <input value={form.barcode} onChange={e => setForm({ ...form, barcode: e.target.value })} className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-800 outline-none focus:border-orange-400" />
               </div>
               <div>
                 <label className="text-sm text-gray-500 mb-1 flex items-center gap-1"><PlayCircle className="w-3.5 h-3.5" strokeWidth={1.75} /> 视频链接（选填）</label>
                 <input value={form.videoUrl} onChange={e => setForm({ ...form, videoUrl: e.target.value })}
                   placeholder="https://youtube.com/... 或任意视频网址"
-                  className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm outline-none focus:border-orange-400" />
+                  className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-800 outline-none focus:border-orange-400 placeholder:text-gray-400" />
               </div>
             </div>
             <div className="flex gap-3 mt-5">
