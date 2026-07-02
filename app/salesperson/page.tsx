@@ -1,6 +1,7 @@
 'use client'
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
+import { CheckCircle2, ClipboardCheck, ClipboardList, ShoppingCart, Check } from 'lucide-react'
 import { store, User, Order, Product, getStatusLabel } from '@/lib/store'
 import Navbar from '@/components/navbar'
 
@@ -81,7 +82,12 @@ export default function SalespersonPage() {
   return (
     <div className="min-h-screen bg-gray-50 pb-20">
       <Navbar user={user} title="业务员工作台" />
-      {toast && <div className="fixed top-16 left-1/2 -translate-x-1/2 bg-gray-800 text-white text-sm px-4 py-2 rounded-full z-50 shadow">{toast}</div>}
+      {toast && (
+        <div className="fixed top-16 left-1/2 -translate-x-1/2 bg-gray-800 text-white text-sm px-4 py-2 rounded-full z-50 shadow flex items-center gap-2">
+          <CheckCircle2 className="w-4 h-4 text-green-400" strokeWidth={1.75} />
+          {toast}
+        </div>
+      )}
 
       <div className="max-w-4xl mx-auto px-4 py-4">
         {/* Stats */}
@@ -104,9 +110,11 @@ export default function SalespersonPage() {
         {tab === 'review' && (
           <div>
             {pendingReview.length === 0 ? (
-              <div className="text-center text-gray-400 py-16">
-                <div className="text-4xl mb-3">✅</div>
-                <div>暂无待审核订单</div>
+              <div className="flex flex-col items-center justify-center py-16 text-center">
+                <div className="w-12 h-12 rounded-full bg-green-50 flex items-center justify-center mb-3">
+                  <CheckCircle2 className="w-6 h-6 text-green-400" strokeWidth={1.5} />
+                </div>
+                <div className="text-gray-400 text-sm">暂无待审核订单</div>
               </div>
             ) : (
               <div className="space-y-3">
@@ -187,7 +195,12 @@ export default function SalespersonPage() {
                     <span className="text-xs text-gray-500">{new Date(order.createdAt).toLocaleString('zh-CN')}</span>
                     <span className="font-bold text-orange-500">€{order.totalAmount.toFixed(2)}</span>
                   </div>
-                  {order.salesId === user.id && <div className="mt-1 text-xs text-green-500">✓ 本人开单</div>}
+                  {order.salesId === user.id && (
+                    <div className="mt-1 flex items-center gap-1 text-xs text-green-500">
+                      <Check className="w-3 h-3" strokeWidth={2.5} />
+                      本人开单
+                    </div>
+                  )}
                 </div>
               ))}
             </div>
@@ -241,12 +254,12 @@ export default function SalespersonPage() {
       {/* Bottom Nav */}
       <div className="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 flex">
         {[
-          { key: 'review', label: `待审核${pendingReview.length > 0 ? `(${pendingReview.length})` : ''}`, icon: '🔍' },
-          { key: 'orders', label: '订单记录', icon: '📋' },
-          { key: 'placeOrder', label: '代客下单', icon: '🛒' },
+          { key: 'review', label: `待审核${pendingReview.length > 0 ? `(${pendingReview.length})` : ''}`, icon: ClipboardCheck },
+          { key: 'orders', label: '订单记录', icon: ClipboardList },
+          { key: 'placeOrder', label: '代客下单', icon: ShoppingCart },
         ].map(t => (
-          <button key={t.key} onClick={() => setTab(t.key as typeof tab)} className={`flex-1 py-3 flex flex-col items-center gap-0.5 text-xs ${tab === t.key ? 'text-orange-500' : 'text-gray-400'}`}>
-            <span className="text-xl">{t.icon}</span>
+          <button key={t.key} onClick={() => setTab(t.key as typeof tab)} className={`flex-1 py-3 flex flex-col items-center gap-1 text-xs transition-colors ${tab === t.key ? 'text-orange-500' : 'text-gray-400'}`}>
+            <t.icon className="w-5 h-5" strokeWidth={tab === t.key ? 2 : 1.75} />
             <span>{t.label}</span>
           </button>
         ))}

@@ -1,6 +1,7 @@
 'use client'
 import { useRef } from 'react'
 import { useRouter } from 'next/navigation'
+import { ArrowLeft, LogOut } from 'lucide-react'
 import { store, User } from '@/lib/store'
 
 interface NavbarProps {
@@ -29,7 +30,7 @@ export default function Navbar({ user, title, backHref, logoUrl, onLogoUpload }:
       <div className="max-w-4xl mx-auto px-4 h-14 flex items-center justify-between">
         <div className="flex items-center gap-3">
           {backHref && (
-            <button onClick={() => router.push(backHref)} className="text-gray-500 hover:text-gray-800 mr-1">←</button>
+            <button onClick={() => router.push(backHref)} className="text-gray-500 hover:text-gray-800 mr-1"><ArrowLeft className="w-4 h-4" strokeWidth={1.75} /></button>
           )}
           <img src="/logo.svg" alt="Yigo" className="h-8 w-auto" />
           <span className="text-gray-300">|</span>
@@ -69,7 +70,10 @@ export default function Navbar({ user, title, backHref, logoUrl, onLogoUpload }:
           )}
           <span className="text-sm text-gray-500">{user.name}</span>
           <span className="text-xs bg-orange-100 text-orange-600 px-2 py-0.5 rounded-full">{roleLabel[user.role]}</span>
-          <button onClick={logout} className="text-xs text-gray-400 hover:text-red-500 transition-colors">退出</button>
+          <button onClick={logout} className="flex items-center gap-1 text-xs text-gray-400 hover:text-red-500 transition-colors">
+            <LogOut className="w-3.5 h-3.5" strokeWidth={1.75} />
+            退出
+          </button>
         </div>
       </div>
     </nav>

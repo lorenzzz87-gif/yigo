@@ -1,6 +1,21 @@
 'use client'
 import { useEffect, useState, useRef } from 'react'
 import { useRouter } from 'next/navigation'
+import {
+  ClipboardList,
+  Package,
+  FileUp,
+  Ticket,
+  Tags,
+  FileSpreadsheet,
+  Trash2,
+  Camera,
+  Copy,
+  PlayCircle,
+  Plus,
+  X,
+  CheckCircle2,
+} from 'lucide-react'
 import { store, User, Product, Order, Category, Invite, getStatusLabel } from '@/lib/store'
 import { exportAllOrders, exportSingleOrder } from '@/lib/excel'
 import BulkImport from './BulkImport'
@@ -195,7 +210,12 @@ export default function WholesalerPage() {
       <Navbar user={user} title={uploadingLogo ? '上传中…' : '批发商工作台'}
         logoUrl={logoUrl || undefined}
         onLogoUpload={handleLogoUpload} />
-      {toast && <div className="fixed top-16 left-1/2 -translate-x-1/2 bg-gray-800 text-white text-sm px-4 py-2 rounded-full z-50 shadow">{toast}</div>}
+      {toast && (
+        <div className="fixed top-16 left-1/2 -translate-x-1/2 bg-gray-800 text-white text-sm px-4 py-2 rounded-full z-50 shadow flex items-center gap-2">
+          <CheckCircle2 className="w-4 h-4 text-green-400" strokeWidth={1.75} />
+          {toast}
+        </div>
+      )}
 
       <div className="max-w-4xl mx-auto px-4 py-6">
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
@@ -208,9 +228,16 @@ export default function WholesalerPage() {
         </div>
 
         <div className="flex gap-2 mb-4 flex-wrap">
-          {(['orders', 'products', 'import', 'invites', 'categories'] as const).map(t => (
-            <button key={t} onClick={() => setTab(t)} className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${tab === t ? 'bg-orange-500 text-white' : 'bg-white text-gray-600 hover:bg-gray-100'}`}>
-              {t === 'orders' ? '📋 订单管理' : t === 'products' ? '📦 商品管理' : t === 'import' ? '📥 批量导入' : t === 'invites' ? '🎫 客户邀请' : '🏷️ 分类管理'}
+          {([
+            ['orders', '订单管理', ClipboardList],
+            ['products', '商品管理', Package],
+            ['import', '批量导入', FileUp],
+            ['invites', '客户邀请', Ticket],
+            ['categories', '分类管理', Tags],
+          ] as const).map(([t, label, Icon]) => (
+            <button key={t} onClick={() => setTab(t)} className={`flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-medium transition-colors ${tab === t ? 'bg-orange-500 text-white' : 'bg-white text-gray-600 hover:bg-gray-100'}`}>
+              <Icon className="w-4 h-4" strokeWidth={1.75} />
+              {label}
             </button>
           ))}
         </div>
@@ -220,7 +247,8 @@ export default function WholesalerPage() {
             <div className="flex justify-end mb-3">
               <button onClick={handleExportAll} disabled={exporting}
                 className="flex items-center gap-2 px-4 py-2 bg-green-500 text-white text-sm rounded-lg hover:bg-green-600 disabled:opacity-60">
-                {exporting ? '导出中…' : '📊 导出全部订单'}
+                <FileSpreadsheet className="w-4 h-4" strokeWidth={1.75} />
+                {exporting ? '导出中…' : '导出全部订单'}
               </button>
             </div>
             <div className="space-y-3">
@@ -260,7 +288,10 @@ export default function WholesalerPage() {
                 placeholder="搜索商品名或条形码，回车确认…"
                 className="flex-1 border border-gray-200 rounded-lg px-3 py-2 text-sm outline-none focus:border-orange-400" />
               <button onClick={() => { setActiveCategoryId(undefined); loadProducts(wid, search, 0) }} className="px-4 py-2 bg-gray-100 text-gray-600 rounded-lg text-sm hover:bg-gray-200">搜索</button>
-              <button onClick={openAddProduct} className="px-4 py-2 bg-orange-500 text-white rounded-lg text-sm font-medium hover:bg-orange-600">+ 添加商品</button>
+              <button onClick={openAddProduct} className="flex items-center gap-1.5 px-4 py-2 bg-orange-500 text-white rounded-lg text-sm font-medium hover:bg-orange-600 transition-colors">
+                <Plus className="w-4 h-4" strokeWidth={2} />
+                添加商品
+              </button>
             </div>
             <div className="flex items-center gap-3 mb-3">
               <span className="text-xs text-gray-600">
@@ -279,7 +310,7 @@ export default function WholesalerPage() {
                 return (
                   <div key={p.id} className="bg-white rounded-xl p-3 shadow-sm flex items-center gap-3">
                     <div className="w-14 h-14 rounded-lg overflow-hidden bg-orange-50 flex items-center justify-center shrink-0">
-                      {p.image ? <img src={p.image} alt={p.name} className="w-full h-full object-cover" /> : <span className="text-2xl">📦</span>}
+                      {p.image ? <img src={p.image} alt={p.name} className="w-full h-full object-cover" /> : <Package className="w-6 h-6 text-orange-200" strokeWidth={1.5} />}
                     </div>
                     <div className="flex-1 min-w-0">
                       <div className="font-medium text-gray-800 truncate">{p.name}</div>
@@ -314,7 +345,8 @@ export default function WholesalerPage() {
             <div className="flex justify-end mb-3">
               <button onClick={clearAllData} disabled={clearing}
                 className="flex items-center gap-2 px-4 py-2 bg-red-500 text-white text-sm rounded-lg hover:bg-red-600 disabled:opacity-60">
-                {clearing ? '清除中…' : '🗑️ 一键清除所有数据'}
+                <Trash2 className="w-4 h-4" strokeWidth={1.75} />
+                {clearing ? '清除中…' : '一键清除所有数据'}
               </button>
             </div>
             <BulkImport
@@ -337,7 +369,10 @@ export default function WholesalerPage() {
 
               {newInvite && (
                 <div className="mt-4 bg-orange-50 border border-orange-200 rounded-xl p-4">
-                  <div className="text-xs text-orange-600 mb-2">✅ 新邀请已生成，发给客户：</div>
+                  <div className="flex items-center gap-1.5 text-xs text-orange-600 mb-2">
+                    <CheckCircle2 className="w-3.5 h-3.5" strokeWidth={1.75} />
+                    新邀请已生成，发给客户：
+                  </div>
                   <div className="flex items-center justify-between bg-white rounded-lg px-4 py-2 mb-2">
                     <span className="text-sm text-gray-500">商家号</span>
                     <span className="font-bold text-gray-800 text-lg tracking-wider">{newInvite.code}</span>
@@ -348,8 +383,9 @@ export default function WholesalerPage() {
                   </div>
                   <button
                     onClick={() => { navigator.clipboard?.writeText(`Yigo易购 商家号：${newInvite.code} 临时密码：${newInvite.tempPassword}（2天内有效，请在登录页"商家注册"输入）`); showToast('已复制邀请信息') }}
-                    className="w-full py-2 bg-orange-500 text-white rounded-lg text-sm font-medium hover:bg-orange-600">
-                    📋 复制邀请信息
+                    className="w-full py-2 bg-orange-500 text-white rounded-lg text-sm font-medium hover:bg-orange-600 flex items-center justify-center gap-1.5">
+                    <Copy className="w-4 h-4" strokeWidth={1.75} />
+                    复制邀请信息
                   </button>
                   <div className="text-xs text-orange-500 mt-2 text-center">有效期至 {new Date(newInvite.expiresAt).toLocaleString('zh-CN')}</div>
                 </div>
@@ -415,11 +451,11 @@ export default function WholesalerPage() {
                 {imagePreview ? (
                   <div className="relative w-full h-40 rounded-xl overflow-hidden bg-gray-100">
                     <img src={imagePreview} alt="预览" className="w-full h-full object-cover" />
-                    <button onClick={() => { setImagePreview(''); setForm(f => ({ ...f, image: '' })) }} className="absolute top-2 right-2 w-7 h-7 bg-black/50 text-white rounded-full flex items-center justify-center text-sm">✕</button>
+                    <button onClick={() => { setImagePreview(''); setForm(f => ({ ...f, image: '' })) }} className="absolute top-2 right-2 w-7 h-7 bg-black/50 text-white rounded-full flex items-center justify-center hover:bg-black/70 transition-colors"><X className="w-3.5 h-3.5" strokeWidth={2} /></button>
                   </div>
                 ) : (
                   <div onClick={() => fileInputRef.current?.click()} className="w-full h-32 border-2 border-dashed border-gray-200 rounded-xl flex flex-col items-center justify-center cursor-pointer hover:border-orange-400 hover:bg-orange-50 transition-colors">
-                    <span className="text-3xl mb-1">📷</span>
+                    <Camera className="w-7 h-7 text-gray-300 mb-1.5" strokeWidth={1.5} />
                     <span className="text-sm text-gray-600">点击上传图片</span>
                     <span className="text-xs text-gray-500">JPG / PNG，最大 2MB</span>
                   </div>
@@ -457,7 +493,7 @@ export default function WholesalerPage() {
                 <input value={form.barcode} onChange={e => setForm({ ...form, barcode: e.target.value })} className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm outline-none focus:border-orange-400" />
               </div>
               <div>
-                <label className="text-sm text-gray-500 mb-1 block">🎬 视频链接（选填）</label>
+                <label className="text-sm text-gray-500 mb-1 flex items-center gap-1"><PlayCircle className="w-3.5 h-3.5" strokeWidth={1.75} /> 视频链接（选填）</label>
                 <input value={form.videoUrl} onChange={e => setForm({ ...form, videoUrl: e.target.value })}
                   placeholder="https://youtube.com/... 或任意视频网址"
                   className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm outline-none focus:border-orange-400" />

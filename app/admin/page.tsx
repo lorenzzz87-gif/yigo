@@ -1,6 +1,7 @@
 'use client'
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
+import { Plus, Store, CheckCircle2, Euro, Users } from 'lucide-react'
 import { store, User, Order, Product, Wholesaler } from '@/lib/store'
 import Navbar from '@/components/navbar'
 
@@ -75,18 +76,28 @@ export default function AdminPage() {
   return (
     <div className="min-h-screen bg-gray-50">
       <Navbar user={user} title="平台管理" />
-      {toast && <div className="fixed top-16 left-1/2 -translate-x-1/2 bg-gray-800 text-white text-sm px-4 py-2 rounded-full z-50 shadow">{toast}</div>}
+      {toast && (
+        <div className="fixed top-16 left-1/2 -translate-x-1/2 bg-gray-800 text-white text-sm px-4 py-2 rounded-full z-50 shadow flex items-center gap-2">
+          <CheckCircle2 className="w-4 h-4 text-green-400" strokeWidth={1.75} />
+          {toast}
+        </div>
+      )}
 
       <div className="max-w-4xl mx-auto px-4 py-6">
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
           {[
-            { label: '批发商总数', value: platform.wholesalers, color: 'text-blue-600' },
-            { label: '运营中', value: platform.active, color: 'text-green-600' },
-            { label: '平台总营收', value: `€${platform.totalRevenue.toFixed(0)}`, color: 'text-orange-500' },
-            { label: '终端商家', value: platform.totalBuyers, color: 'text-purple-600' },
+            { label: '批发商总数', value: platform.wholesalers, color: 'text-blue-600', icon: Store, iconBg: 'bg-blue-50' },
+            { label: '运营中', value: platform.active, color: 'text-green-600', icon: CheckCircle2, iconBg: 'bg-green-50' },
+            { label: '平台总营收', value: `€${platform.totalRevenue.toFixed(0)}`, color: 'text-orange-500', icon: Euro, iconBg: 'bg-orange-50' },
+            { label: '终端商家', value: platform.totalBuyers, color: 'text-purple-600', icon: Users, iconBg: 'bg-purple-50' },
           ].map(s => (
             <div key={s.label} className="bg-white rounded-xl p-4 shadow-sm">
-              <div className={`text-2xl font-bold ${s.color}`}>{s.value}</div>
+              <div className="flex items-center justify-between">
+                <div className={`text-2xl font-bold ${s.color}`}>{s.value}</div>
+                <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${s.iconBg} ${s.color}`}>
+                  <s.icon className="w-4 h-4" strokeWidth={1.75} />
+                </div>
+              </div>
               <div className="text-gray-400 text-sm mt-1">{s.label}</div>
             </div>
           ))}
@@ -94,11 +105,21 @@ export default function AdminPage() {
 
         <div className="flex items-center justify-between mb-4">
           <h2 className="font-semibold text-gray-700">批发商账号</h2>
-          <button onClick={() => { setShowForm(true); setFormError('') }} className="px-4 py-2 bg-orange-500 text-white rounded-lg text-sm font-medium hover:bg-orange-600">+ 开通批发商</button>
+          <button onClick={() => { setShowForm(true); setFormError('') }} className="flex items-center gap-1.5 px-4 py-2 bg-orange-500 text-white rounded-lg text-sm font-medium hover:bg-orange-600 transition-colors">
+            <Plus className="w-4 h-4" strokeWidth={2} />
+            开通批发商
+          </button>
         </div>
 
         <div className="space-y-3">
-          {wholesalers.length === 0 && <div className="text-center text-gray-400 py-12">还没有批发商，点击右上角开通</div>}
+          {wholesalers.length === 0 && (
+            <div className="flex flex-col items-center justify-center py-12 text-center">
+              <div className="w-12 h-12 rounded-full bg-gray-100 flex items-center justify-center mb-3">
+                <Store className="w-6 h-6 text-gray-300" strokeWidth={1.5} />
+              </div>
+              <div className="text-gray-400 text-sm">还没有批发商，点击右上角开通</div>
+            </div>
+          )}
           {wholesalers.map(w => {
             const s = statsFor(w.id)
             return (
