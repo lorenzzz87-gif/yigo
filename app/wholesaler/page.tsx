@@ -40,6 +40,9 @@ export default function WholesalerPage() {
   const [editProduct, setEditProduct] = useState<Product | null>(null)
   const [form, setForm] = useState({ name: '', categoryId: '', price: '', unit: '件', stock: '', barcode: '', description: '', image: '', videoUrl: '' })
   const [imagePreview, setImagePreview] = useState('')
+  const [extraImages, setExtraImages] = useState<string[]>([])       // existing extra URLs
+  const [newExtraFiles, setNewExtraFiles] = useState<File[]>([])      // new files to upload
+  const extraImgRef = useRef<HTMLInputElement>(null)
   const [newCatName, setNewCatName] = useState('')
   const [search, setSearch] = useState('')
   const [saving, setSaving] = useState(false)
@@ -108,13 +111,13 @@ export default function WholesalerPage() {
   function openAddProduct() {
     setEditProduct(null)
     setForm({ name: '', categoryId: categories[0]?.id || '', price: '', unit: '件', stock: '', barcode: '', description: '', image: '', videoUrl: '' })
-    setImagePreview(''); setShowProductForm(true)
+    setImagePreview(''); setExtraImages([]); setNewExtraFiles([]); setShowProductForm(true)
   }
 
   function openEditProduct(p: Product) {
     setEditProduct(p)
     setForm({ name: p.name, categoryId: p.categoryId, price: String(p.price), unit: p.unit, stock: String(p.stock), barcode: p.barcode || '', description: p.description || '', image: p.image || '', videoUrl: p.videoUrl || '' })
-    setImagePreview(p.image || ''); setShowProductForm(true)
+    setImagePreview(p.image || ''); setExtraImages(p.images || []); setNewExtraFiles([]); setShowProductForm(true)
   }
 
   function handleImageChange(e: React.ChangeEvent<HTMLInputElement>) {
@@ -132,7 +135,19 @@ export default function WholesalerPage() {
   async function saveProduct() {
     if (!form.name || !form.price) return
     setSaving(true)
-    const data = { name: form.name, categoryId: form.categoryId, price: parseFloat(form.price), unit: form.unit, stock: parseInt(form.stock) || 0, barcode: form.barcode, description: form.description, image: form.image, videoUrl: form.videoUrl || undefined }
+    // Upload any new extra image files
+    const imgKey = form.barcode || form.name.slice(0, 20).replace(/\s+/g, '_')
+    const uploadedExtras: string[] = []
+    for (let i = 0; i < newExtraFiles.length; i++) {
+      try {
+        const { compressImage } = await import('@/lib/imageUtils')
+        const compressed = await compressImage(newExtraFiles[i])
+        const url = await store.uploadProductImage(wid, `${imgKey}_${extraImages.length + i + 2}`, compressed)
+        uploadedExtras.push(url)
+      } catch { /* skip failed */ }
+    }
+    const allExtras = [...extraImages, ...uploadedExtras]
+    const data = { name: form.name, categoryId: form.categoryId, price: parseFloat(form.price), unit: form.unit, stock: parseInt(form.stock) || 0, barcode: form.barcode, description: form.description, image: form.image, images: allExtras.length ? allExtras : undefined, videoUrl: form.videoUrl || undefined }
     if (editProduct) await store.updateProduct(editProduct.id, data)
     else await store.addProduct(data, wid)
     setSaving(false); setShowProductForm(false); refreshData(wid)
@@ -462,6 +477,38 @@ export default function WholesalerPage() {
                 )}
                 <input ref={fileInputRef} type="file" accept="image/*" className="hidden" onChange={handleImageChange} />
               </div>
+
+              {/* 多图：额外图片 */}
+              <div>
+                <label className="text-sm text-gray-500 mb-1 block">更多图片（第2、3、4张…）</label>
+                <div className="flex gap-2 flex-wrap">
+                  {/* existing extra images */}
+                  {extraImages.map((url, i) => (
+                    <div key={url} className="relative w-20 h-20 rounded-lg overflow-hidden bg-gray-100 shrink-0">
+                      <img src={url} alt="" className="w-full h-full object-cover" />
+                      <button onClick={() => setExtraImages(imgs => imgs.filter((_, j) => j !== i))}
+                        className="absolute top-1 right-1 w-5 h-5 bg-black/50 text-white rounded-full flex items-center justify-center text-xs hover:bg-red-500 transition-colors">✕</button>
+                    </div>
+                  ))}
+                  {/* new pending files (preview) */}
+                  {newExtraFiles.map((f, i) => (
+                    <div key={i} className="relative w-20 h-20 rounded-lg overflow-hidden bg-gray-100 shrink-0">
+                      <img src={URL.createObjectURL(f)} alt="" className="w-full h-full object-cover" />
+                      <button onClick={() => setNewExtraFiles(fs => fs.filter((_, j) => j !== i))}
+                        className="absolute top-1 right-1 w-5 h-5 bg-black/50 text-white rounded-full flex items-center justify-center text-xs hover:bg-red-500 transition-colors">✕</button>
+                      <div className="absolute bottom-0 left-0 right-0 bg-orange-500 text-white text-[10px] text-center py-0.5">待上传</div>
+                    </div>
+                  ))}
+                  {/* add button */}
+                  <button onClick={() => extraImgRef.current?.click()}
+                    className="w-20 h-20 border-2 border-dashed border-gray-200 rounded-lg flex flex-col items-center justify-center text-gray-400 hover:border-orange-400 hover:text-orange-400 transition-colors shrink-0 text-2xl">
+                    +
+                  </button>
+                </div>
+                <input ref={extraImgRef} type="file" accept="image/*" multiple className="hidden"
+                  onChange={e => { setNewExtraFiles(fs => [...fs, ...Array.from(e.target.files || [])]); e.target.value = '' }} />
+              </div>
+
               <div>
                 <label className="text-sm text-gray-500 mb-1 block">商品名称 *</label>
                 <input value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm outline-none focus:border-orange-400" />
