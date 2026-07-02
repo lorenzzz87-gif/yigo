@@ -242,9 +242,9 @@ export default function BuyerPage() {
               const imgs = [detailProduct.image, ...(detailProduct.images || [])].filter(Boolean) as string[]
               const idx = Math.min(detailImgIdx, imgs.length - 1)
               return (
-                <div className="relative w-full bg-gray-50 min-h-[180px] flex items-center justify-center">
+                <div className="relative w-full bg-gray-50 shrink-0 h-[300px] flex items-center justify-center overflow-hidden">
                   {imgs.length > 0
-                    ? <img src={imgs[idx]} alt={detailProduct.name} className="w-full object-contain max-h-72" />
+                    ? <img src={imgs[idx]} alt={detailProduct.name} className="max-w-full max-h-full object-contain" />
                     : <div className="w-full h-48 flex items-center justify-center text-6xl">{productEmoji(detailProduct.categoryId)}</div>
                   }
                   {imgs.length > 1 && <>

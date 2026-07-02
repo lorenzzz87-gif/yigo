@@ -491,9 +491,9 @@ export default function B2BPage() {
               const imgs = [detailProduct.image, ...(detailProduct.images || [])].filter(Boolean) as string[]
               const idx = Math.min(detailImgIdx, imgs.length - 1)
               return (
-                <div className="relative bg-gray-50 flex items-center justify-center" style={{minHeight: '340px'}}>
+                <div className="relative bg-gray-50 flex items-center justify-center shrink-0 h-[300px] sm:h-[420px] overflow-hidden">
                   {imgs.length > 0
-                    ? <img src={imgs[idx]} alt={detailProduct.name} className="w-full object-contain max-h-[460px]" />
+                    ? <img src={imgs[idx]} alt={detailProduct.name} className="max-w-full max-h-full object-contain" />
                     : <Package className="w-16 h-16 text-gray-300" strokeWidth={1.5} />
                   }
                   {imgs.length > 1 && <>
