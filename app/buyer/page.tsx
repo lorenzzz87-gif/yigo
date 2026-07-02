@@ -63,10 +63,11 @@ export default function BuyerPage() {
   const subcategories = selectedCat === 'all' ? [] :
     [...new Set(products.filter(p => p.categoryId === selectedCat).map(p => p.subcategory).filter(Boolean) as string[])].sort()
 
+  const q = search.trim().toLowerCase()
   const filtered = products.filter(p =>
     (selectedCat === 'all' || p.categoryId === selectedCat) &&
     (!selectedSubcat || p.subcategory === selectedSubcat) &&
-    (!search || p.name.includes(search))
+    (!q || p.name.toLowerCase().includes(q) || (p.sku || '').toLowerCase().includes(q) || (p.barcode || '').toLowerCase().includes(q))
   )
   const cartTotal = cart.reduce((sum, item) => {
     const p = products.find(p => p.id === item.productId)
@@ -87,7 +88,7 @@ export default function BuyerPage() {
       <div className="max-w-4xl mx-auto px-4 py-4">
         {tab === 'shop' && (
           <div>
-            <input value={search} onChange={e => setSearch(e.target.value)} placeholder="搜索商品…" className="w-full border border-gray-200 bg-white rounded-xl px-3 py-2 text-sm outline-none focus:border-orange-400 mb-3" />
+            <input value={search} onChange={e => setSearch(e.target.value)} placeholder="搜索编号 / 商品名 / 条形码…" className="w-full border border-gray-200 bg-white rounded-xl px-3 py-2 text-sm text-gray-800 placeholder:text-gray-400 outline-none focus:border-orange-400 mb-3" />
             {/* 大类 row */}
             <div className="flex gap-2 mb-2 overflow-x-auto pb-1">
               <button onClick={() => { setSelectedCat('all'); setSelectedSubcat(null) }}
@@ -124,10 +125,11 @@ export default function BuyerPage() {
                     <div className="rounded-lg w-full aspect-square overflow-hidden bg-orange-50 flex items-center justify-center mb-2 cursor-pointer" onClick={() => setDetailProduct(p)}>
                       {p.image ? <img src={p.image} alt={p.name} className="w-full h-full object-contain" /> : <span className="text-4xl">{productEmoji(p.categoryId)}</span>}
                     </div>
+                    {p.sku && <div className="text-sm font-bold text-gray-900">{p.sku}</div>}
                     <div className="font-medium text-gray-800 text-sm truncate mb-0.5">{p.name}</div>
                     <div className="flex items-center gap-2 mb-2 flex-wrap">
                       {p.subcategory && <span className="text-xs bg-orange-50 text-orange-500 px-1.5 py-0.5 rounded">{p.subcategory}</span>}
-                      <span className="text-xs text-gray-400">库存: {p.stock} pz</span>
+                      <span className="text-xs text-gray-600">库存: {p.stock} pz</span>
                       {p.videoUrl && <a href={p.videoUrl} target="_blank" rel="noreferrer" className="text-xs text-blue-500 hover:underline">🎬 视频</a>}
                     </div>
                     <div className="flex items-center justify-between">
@@ -136,7 +138,7 @@ export default function BuyerPage() {
                         <div className="flex flex-col gap-1 items-end">
                           {packItem && (
                             <div className="flex items-center gap-1">
-                              <span className="text-xs text-gray-400">包</span>
+                              <span className="text-xs text-gray-500">包</span>
                               <button onClick={() => updateQty(p.id, packItem.quantity - 1, 'pack')} className="w-6 h-6 rounded-full bg-orange-100 text-orange-500 font-bold text-sm flex items-center justify-center">-</button>
                               <span className="text-sm w-5 text-center">{packItem.quantity}</span>
                               <button onClick={() => updateQty(p.id, packItem.quantity + 1, 'pack')} className="w-6 h-6 rounded-full bg-orange-500 text-white font-bold text-sm flex items-center justify-center">+</button>
@@ -144,7 +146,7 @@ export default function BuyerPage() {
                           )}
                           {boxItem && (
                             <div className="flex items-center gap-1">
-                              <span className="text-xs text-gray-400">箱</span>
+                              <span className="text-xs text-gray-500">箱</span>
                               <button onClick={() => updateQty(p.id, boxItem.quantity - 1, 'box')} className="w-6 h-6 rounded-full bg-orange-100 text-orange-500 font-bold text-sm flex items-center justify-center">-</button>
                               <span className="text-sm w-5 text-center">{boxItem.quantity}</span>
                               <button onClick={() => updateQty(p.id, boxItem.quantity + 1, 'box')} className="w-6 h-6 rounded-full bg-orange-500 text-white font-bold text-sm flex items-center justify-center">+</button>
@@ -155,7 +157,7 @@ export default function BuyerPage() {
                         <div className="flex flex-col gap-1 items-end">
                           <button onClick={() => addToCart(p.id, 'pack')} className="text-xs px-2 py-1 bg-orange-500 text-white rounded-lg font-medium">中包 {p.unit} pz</button>
                           {p.boxQty && <button onClick={() => addToCart(p.id, 'box')} className="text-xs px-2 py-1 bg-orange-700 text-white rounded-lg font-medium">整箱 {p.boxQty} pz</button>}
-                          <button onClick={() => setUnitPicker(null)} className="text-xs text-gray-400">取消</button>
+                          <button onClick={() => setUnitPicker(null)} className="text-xs text-gray-500">取消</button>
                         </div>
                       ) : (
                         <button onClick={() => p.boxQty ? setUnitPicker(p.id) : addToCart(p.id, 'pack')} className="w-7 h-7 rounded-full bg-orange-500 text-white text-xl flex items-center justify-center hover:bg-orange-600">+</button>
@@ -170,7 +172,7 @@ export default function BuyerPage() {
 
         {tab === 'cart' && (
           <div>
-            {cart.length === 0 ? <div className="text-center text-gray-400 py-16">购物车为空，去选购吧！</div> : (
+            {cart.length === 0 ? <div className="text-center text-gray-500 py-16">购物车为空，去选购吧！</div> : (
               <>
                 <div className="space-y-3 mb-4">
                   {cart.map((item, idx) => {
@@ -186,7 +188,7 @@ export default function BuyerPage() {
                         </div>
                         <div className="flex-1 min-w-0">
                           <div className="font-medium text-gray-800 truncate">{p.name}</div>
-                          <div className="text-sm text-orange-500">€{unitPrice.toFixed(2)} / {unitLabel}{isBox && <span className="text-xs text-gray-400 ml-1">({p.boxQty}{p.unit})</span>}</div>
+                          <div className="text-sm text-orange-500">€{unitPrice.toFixed(2)} / {unitLabel}{isBox && <span className="text-xs text-gray-500 ml-1">({p.boxQty}{p.unit})</span>}</div>
                         </div>
                         <div className="flex items-center gap-2 shrink-0">
                           <button onClick={() => updateQty(item.productId, item.quantity - 1, item.orderUnit)} className="w-7 h-7 rounded-full bg-gray-100 font-bold flex items-center justify-center">-</button>
@@ -217,7 +219,7 @@ export default function BuyerPage() {
 
         {tab === 'orders' && (
           <div className="space-y-3">
-            {orders.length === 0 && <div className="text-center text-gray-400 py-12">暂无订单</div>}
+            {orders.length === 0 && <div className="text-center text-gray-500 py-12">暂无订单</div>}
             {orders.map(order => (
               <div key={order.id} className="bg-white rounded-xl p-4 shadow-sm">
                 <div className="flex items-center justify-between mb-2">
@@ -262,6 +264,7 @@ export default function BuyerPage() {
               )
             })()}
             <div className="p-4 relative z-10 bg-white">
+              {detailProduct.sku && <div className="text-base font-bold text-gray-900 mb-1">编号：{detailProduct.sku}</div>}
               <div className="font-bold text-gray-800 text-lg mb-1">{detailProduct.name}</div>
               {detailProduct.subcategory && <span className="inline-block text-xs bg-orange-50 text-orange-500 px-2 py-0.5 rounded mb-3">{detailProduct.subcategory}</span>}
               <div className="text-2xl font-bold text-orange-500 mb-3">€{detailProduct.price.toFixed(2)}</div>

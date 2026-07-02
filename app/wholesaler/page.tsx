@@ -78,7 +78,7 @@ export default function WholesalerPage() {
   async function loadProducts(w: string, q: string, page: number, catId?: string) {
     const [prods, total] = await Promise.all([
       store.getProducts(w, q || undefined, PRODUCT_PAGE_SIZE, page * PRODUCT_PAGE_SIZE, catId),
-      store.countProducts(w, catId),
+      store.countProducts(w, catId, undefined, q || undefined),
     ])
     setProducts(prods); setProductTotal(total); setProductPage(page)
     setActiveCategoryId(catId)
@@ -370,8 +370,8 @@ export default function WholesalerPage() {
               <input value={search}
                 onChange={e => setSearch(e.target.value)}
                 onKeyDown={e => { if (e.key === 'Enter') { setActiveCategoryId(undefined); loadProducts(wid, search, 0) } }}
-                placeholder="搜索商品名或条形码，回车确认…"
-                className="flex-1 border border-gray-200 rounded-lg px-3 py-2 text-sm outline-none focus:border-orange-400" />
+                placeholder="搜索编号 / 商品名 / 条形码，回车确认…"
+                className="flex-1 border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-800 placeholder:text-gray-400 outline-none focus:border-orange-400" />
               <button onClick={() => { setActiveCategoryId(undefined); loadProducts(wid, search, 0) }} className="px-4 py-2 bg-gray-100 text-gray-600 rounded-lg text-sm hover:bg-gray-200">搜索</button>
               <button onClick={openAddProduct} className="flex items-center gap-1.5 px-4 py-2 bg-orange-500 text-white rounded-lg text-sm font-medium hover:bg-orange-600 transition-colors">
                 <Plus className="w-4 h-4" strokeWidth={2} />
@@ -398,6 +398,7 @@ export default function WholesalerPage() {
                       {p.image ? <img src={p.image} alt={p.name} className="w-full h-full object-cover" /> : <Package className="w-6 h-6 text-orange-200" strokeWidth={1.5} />}
                     </div>
                     <div className="flex-1 min-w-0">
+                      {p.sku && <div className="text-sm font-bold text-gray-900">编号：{p.sku}</div>}
                       <div className="font-medium text-gray-800 truncate">{p.name}</div>
                       <div className="text-sm text-gray-600">{cat?.name} · {p.unit} · 库存:{p.stock}</div>
                       {p.barcode && <div className="text-xs text-gray-500">条码:{p.barcode}</div>}

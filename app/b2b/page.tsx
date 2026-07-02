@@ -20,8 +20,8 @@ import { store, User, Product, Category, Order, BuyerProfile } from '@/lib/store
 type Lang = 'it' | 'zh'
 
 const T: Record<Lang, Record<string, string>> = {
-  it: { catalog: 'Catalogo', myOrders: 'I miei ordini', profilo: 'Profilo', search: 'Cerca prodotti…', all: 'Tutti', cart: 'Carrello', stock: 'Disponibilità', total: 'Totale', submit: 'Invia ordine', submitting: 'Invio…', sent: 'Ordine inviato!', empty: 'Il carrello è vuoto', note: 'Note', notePh: 'Es. consegnare al più presto…', logout: 'Esci', noProducts: 'Nessun prodotto disponibile', noOrders: 'Nessun ordine', addToCart: 'Aggiungi', items: 'articoli', qty: 'Q.tà', mobileVer: '手机版', backCatalog: 'Continua acquisti', remove: 'Rimuovi', checkout: 'Vai al carrello', save: 'Salva', saving: 'Salvataggio…', saved: '✓ Salvato', profiloDesc: 'Dati utilizzati per fatturazione, spedizioni e comunicazioni ordini.' },
-  zh: { catalog: '商品目录', myOrders: '我的订单', profilo: '我的资料', search: '搜索商品…', all: '全部', cart: '购物车', stock: '库存', total: '合计', submit: '提交订单', submitting: '提交中…', sent: '下单成功！', empty: '购物车为空', note: '备注', notePh: '如：请尽快发货…', logout: '退出', noProducts: '暂无商品', noOrders: '暂无订单', addToCart: '加入', items: '种商品', qty: '数量', mobileVer: '手机版', backCatalog: '继续选购', remove: '移除', checkout: '去购物车', save: '保存', saving: '保存中…', saved: '✓ 已保存', profiloDesc: '用于开票、物流发货和订单通知的信息。' },
+  it: { catalog: 'Catalogo', myOrders: 'I miei ordini', profilo: 'Profilo', search: 'Cerca per codice / nome / barcode…', all: 'Tutti', cart: 'Carrello', stock: 'Disponibilità', total: 'Totale', submit: 'Invia ordine', submitting: 'Invio…', sent: 'Ordine inviato!', empty: 'Il carrello è vuoto', note: 'Note', notePh: 'Es. consegnare al più presto…', logout: 'Esci', noProducts: 'Nessun prodotto disponibile', noOrders: 'Nessun ordine', addToCart: 'Aggiungi', items: 'articoli', qty: 'Q.tà', mobileVer: '手机版', backCatalog: 'Continua acquisti', remove: 'Rimuovi', checkout: 'Vai al carrello', save: 'Salva', saving: 'Salvataggio…', saved: '✓ Salvato', profiloDesc: 'Dati utilizzati per fatturazione, spedizioni e comunicazioni ordini.' },
+  zh: { catalog: '商品目录', myOrders: '我的订单', profilo: '我的资料', search: '搜索编号 / 商品名 / 条形码…', all: '全部', cart: '购物车', stock: '库存', total: '合计', submit: '提交订单', submitting: '提交中…', sent: '下单成功！', empty: '购物车为空', note: '备注', notePh: '如：请尽快发货…', logout: '退出', noProducts: '暂无商品', noOrders: '暂无订单', addToCart: '加入', items: '种商品', qty: '数量', mobileVer: '手机版', backCatalog: '继续选购', remove: '移除', checkout: '去购物车', save: '保存', saving: '保存中…', saved: '✓ 已保存', profiloDesc: '用于开票、物流发货和订单通知的信息。' },
 }
 const STATUS: Record<Lang, Record<string, string>> = {
   it: { pending_review: 'In revisione', pending: 'In attesa di conferma', confirmed: 'Confermato', shipped: 'Spedito', completed: 'Completato', cancelled: 'Annullato' },
@@ -86,7 +86,7 @@ export default function B2BPage() {
     setProductsLoading(true)
     const [prods, total] = await Promise.all([
       store.getProducts(wid, q || undefined, PAGE_SIZE, page * PAGE_SIZE, catId, subcat),
-      store.countProducts(wid, catId, subcat),
+      store.countProducts(wid, catId, subcat, q || undefined),
     ])
     setProducts(prods); setProductTotal(total); setProductPage(page); setProductsLoading(false)
   }
@@ -195,7 +195,7 @@ export default function B2BPage() {
               <input value={searchInput} onChange={e => setSearchInput(e.target.value)}
                 onKeyDown={e => e.key === 'Enter' && runSearch()}
                 placeholder={t.search}
-                className="w-full bg-gray-100 rounded-full pl-11 pr-4 py-2.5 text-sm outline-none focus:bg-white focus:ring-2 focus:ring-orange-300 transition" />
+                className="w-full bg-gray-100 rounded-full pl-11 pr-4 py-2.5 text-sm text-gray-800 placeholder:text-gray-500 outline-none focus:bg-white focus:ring-2 focus:ring-orange-300 transition" />
               <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" strokeWidth={1.75} />
             </div>
           </div>
@@ -263,7 +263,7 @@ export default function B2BPage() {
 
             {/* Product grid */}
             <main className="flex-1">
-              <div className="text-xs text-gray-400 mb-3">
+              <div className="text-xs text-gray-500 mb-3">
                 {productTotal} {t.items}，{productPage * PAGE_SIZE + 1}–{Math.min((productPage + 1) * PAGE_SIZE, productTotal)}
               </div>
               {productsLoading ? (
@@ -284,7 +284,7 @@ export default function B2BPage() {
                   <div className="w-12 h-12 rounded-full bg-gray-100 flex items-center justify-center mb-3">
                     <Package className="w-6 h-6 text-gray-300" strokeWidth={1.5} />
                   </div>
-                  <div className="text-gray-400 text-sm">{t.noProducts}</div>
+                  <div className="text-gray-600 text-sm">{t.noProducts}</div>
                 </div>
               ) : (
                 <div className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
@@ -298,10 +298,11 @@ export default function B2BPage() {
                           {p.image ? <img src={p.image} alt={p.name} className="w-full h-full object-contain" /> : <Package className="w-10 h-10 text-orange-200" strokeWidth={1.5} />}
                         </div>
                         <div className="p-3 flex flex-col flex-1">
+                          {p.sku && <div className="text-sm font-bold text-gray-900 mb-0.5">{p.sku}</div>}
                           <div className="font-medium text-gray-800 text-sm mb-1 line-clamp-2 min-h-[2.5rem]">{p.name}</div>
                           <div className="flex items-center gap-2 mb-2 flex-wrap">
                             {p.subcategory && <span className="text-xs bg-orange-50 text-orange-500 px-1.5 py-0.5 rounded">{p.subcategory}</span>}
-                            <span className="text-xs text-gray-400">{t.stock}: {p.stock} pz</span>
+                            <span className="text-xs text-gray-600">{t.stock}: {p.stock} pz</span>
                             {p.videoUrl && (
                               <a href={p.videoUrl} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-xs text-blue-500 hover:underline">
                                 <PlayCircle className="w-3.5 h-3.5" strokeWidth={1.75} /> Video
@@ -314,7 +315,7 @@ export default function B2BPage() {
                               <div className="flex flex-col gap-1 items-end">
                                 {packItem && (
                                   <div className="flex items-center gap-1">
-                                    <span className="text-xs text-gray-400">{lang === 'it' ? 'Cf' : '包'}</span>
+                                    <span className="text-xs text-gray-500">{lang === 'it' ? 'Cf' : '包'}</span>
                                     <button onClick={() => updateQty(p.id, packItem.quantity - 1, 'pack')} className="w-6 h-6 rounded-full bg-orange-100 text-orange-600 font-bold flex items-center justify-center hover:bg-orange-200">−</button>
                                     <span className="w-5 text-center font-medium text-sm">{packItem.quantity}</span>
                                     <button onClick={() => updateQty(p.id, packItem.quantity + 1, 'pack')} className="w-6 h-6 rounded-full bg-orange-500 text-white font-bold flex items-center justify-center hover:bg-orange-600">+</button>
@@ -322,7 +323,7 @@ export default function B2BPage() {
                                 )}
                                 {boxItem && (
                                   <div className="flex items-center gap-1">
-                                    <span className="text-xs text-gray-400">{lang === 'it' ? 'Cx' : '箱'}</span>
+                                    <span className="text-xs text-gray-500">{lang === 'it' ? 'Cx' : '箱'}</span>
                                     <button onClick={() => updateQty(p.id, boxItem.quantity - 1, 'box')} className="w-6 h-6 rounded-full bg-orange-100 text-orange-600 font-bold flex items-center justify-center hover:bg-orange-200">−</button>
                                     <span className="w-5 text-center font-medium text-sm">{boxItem.quantity}</span>
                                     <button onClick={() => updateQty(p.id, boxItem.quantity + 1, 'box')} className="w-6 h-6 rounded-full bg-orange-500 text-white font-bold flex items-center justify-center hover:bg-orange-600">+</button>
@@ -371,7 +372,7 @@ export default function B2BPage() {
                 <div className="w-12 h-12 rounded-full bg-gray-100 flex items-center justify-center mb-3">
                   <ClipboardList className="w-6 h-6 text-gray-300" strokeWidth={1.5} />
                 </div>
-                <div className="text-gray-400 text-sm">{t.noOrders}</div>
+                <div className="text-gray-600 text-sm">{t.noOrders}</div>
               </div>
             ) : (
               <div className="space-y-3">
@@ -511,6 +512,7 @@ export default function B2BPage() {
               )
             })()}
             <div className="p-5 overflow-y-auto relative z-10 bg-white">
+              {detailProduct.sku && <div className="text-base font-bold text-gray-900 mb-1">{lang === 'it' ? 'Cod.' : '编号'}：{detailProduct.sku}</div>}
               <div className="font-bold text-gray-800 text-xl mb-1">{detailProduct.name}</div>
               {detailProduct.subcategory && <span className="inline-block text-xs bg-orange-50 text-orange-500 px-2 py-0.5 rounded mb-3">{detailProduct.subcategory}</span>}
               <div className="text-3xl font-bold text-orange-500 mb-4">€{detailProduct.price.toFixed(2)}</div>
@@ -585,7 +587,7 @@ export default function B2BPage() {
                         </div>
                         <div className="flex-1 min-w-0">
                           <div className="font-medium text-gray-800 text-sm truncate">{p.name}</div>
-                          <div className="text-sm text-orange-500 font-semibold">€{unitPrice.toFixed(2)} / {unitLabel}{isBox && <span className="text-xs text-gray-400 ml-1">({p.boxQty} cf)</span>}</div>
+                          <div className="text-sm text-orange-500 font-semibold">€{unitPrice.toFixed(2)} / {unitLabel}{isBox && <span className="text-xs text-gray-500 ml-1">({p.boxQty} cf)</span>}</div>
                         </div>
                         <div className="flex items-center gap-1.5 shrink-0">
                           <button onClick={() => updateQty(item.productId, item.quantity - 1, item.orderUnit)} className="w-7 h-7 rounded-full bg-gray-200 font-bold flex items-center justify-center">−</button>

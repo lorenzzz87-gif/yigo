@@ -349,15 +349,16 @@ export const store = {
     if (wholesalerId) q = q.eq('wholesaler_id', wholesalerId)
     if (categoryId) q = q.eq('category_id', categoryId)
     if (subcategory) q = q.eq('subcategory', subcategory)
-    if (search) q = q.or(`name.ilike.%${search}%,barcode.ilike.%${search}%`)
+    if (search) q = q.or(`sku.ilike.%${search}%,name.ilike.%${search}%,barcode.ilike.%${search}%`)
     const { data } = await q
     return (data || []).map(toProduct)
   },
-  async countProducts(wholesalerId?: string, categoryId?: string, subcategory?: string): Promise<number> {
+  async countProducts(wholesalerId?: string, categoryId?: string, subcategory?: string, search?: string): Promise<number> {
     let q = supabase.from('products').select('*', { count: 'exact', head: true })
     if (wholesalerId) q = q.eq('wholesaler_id', wholesalerId)
     if (categoryId) q = q.eq('category_id', categoryId)
     if (subcategory) q = q.eq('subcategory', subcategory)
+    if (search) q = q.or(`sku.ilike.%${search}%,name.ilike.%${search}%,barcode.ilike.%${search}%`)
     const { count } = await q
     return count || 0
   },
