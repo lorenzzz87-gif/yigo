@@ -269,7 +269,7 @@ export default function WholesalerPage() {
   const filteredProducts = products // server-side filtered now
 
   const statusActions: Record<Order['status'], { label: string; next: Order['status'] }[]> = {
-    pending_review: [],
+    pending_review: [{ label: '确认接单', next: 'confirmed' }, { label: '拒绝', next: 'cancelled' }],
     pending: [{ label: '确认订单', next: 'confirmed' }, { label: '取消', next: 'cancelled' }],
     confirmed: [{ label: '标记发货', next: 'shipped' }],
     shipped: [{ label: '完成', next: 'completed' }],
@@ -282,8 +282,8 @@ export default function WholesalerPage() {
   }
 
   const stats = {
-    totalOrders: orders.filter(o => o.status !== 'pending_review').length,
-    pendingOrders: orders.filter(o => o.status === 'pending').length,
+    totalOrders: orders.filter(o => o.status !== 'cancelled').length,
+    pendingOrders: orders.filter(o => o.status === 'pending' || o.status === 'pending_review').length,
     todayRevenue: orders.filter(o => !['cancelled', 'pending_review'].includes(o.status) && o.createdAt.startsWith(new Date().toISOString().slice(0, 10))).reduce((s, o) => s + o.totalAmount, 0),
     totalProducts: products.length,
   }
@@ -337,12 +337,12 @@ export default function WholesalerPage() {
               </button>
             </div>
             <div className="space-y-3">
-              {orders.filter(o => o.status !== 'pending_review').length === 0 && <div className="text-center text-gray-500 py-12">暂无订单</div>}
-              {orders.filter(o => o.status !== 'pending_review').map(order => (
-                <div key={order.id} className="bg-white rounded-xl p-4 shadow-sm">
+              {orders.length === 0 && <div className="text-center text-gray-500 py-12">暂无订单</div>}
+              {orders.map(order => (
+                <div key={order.id} className={`bg-white rounded-xl p-4 shadow-sm ${order.status === 'pending_review' ? 'ring-2 ring-orange-300' : ''}`}>
                   <div className="flex items-center justify-between mb-2">
                     <div><span className="font-semibold text-gray-800">{order.orderNo}</span><span className="ml-2 text-sm text-gray-600">{order.buyerName}</span></div>
-                    <span className={`text-xs px-2 py-1 rounded-full font-medium ${statusColor[order.status]}`}>{getStatusLabel(order.status)}</span>
+                    <span className={`text-xs px-2 py-1 rounded-full font-medium ${statusColor[order.status]}`}>{order.status === 'pending_review' ? '新订单 · 待接单' : getStatusLabel(order.status)}</span>
                   </div>
                   <div className="text-sm text-gray-500 mb-2">{order.items.map(i => `${i.productName}×${i.quantity}`).join('、')}</div>
                   <div className="flex items-center justify-between">
