@@ -20,8 +20,8 @@ import { store, User, Product, Category, Order, BuyerProfile } from '@/lib/store
 type Lang = 'it' | 'zh'
 
 const T: Record<Lang, Record<string, string>> = {
-  it: { catalog: 'Catalogo', myOrders: 'I miei ordini', profilo: 'Profilo', search: 'Cerca per codice / nome / barcode…', all: 'Tutti', cart: 'Carrello', stock: 'Disponibilità', total: 'Totale', submit: 'Invia ordine', submitting: 'Invio…', sent: 'Ordine inviato!', empty: 'Il carrello è vuoto', note: 'Note', notePh: 'Es. consegnare al più presto…', logout: 'Esci', noProducts: 'Nessun prodotto disponibile', noOrders: 'Nessun ordine', addToCart: 'Aggiungi', items: 'articoli', qty: 'Q.tà', mobileVer: '手机版', backCatalog: 'Continua acquisti', remove: 'Rimuovi', checkout: 'Vai al carrello', save: 'Salva', saving: 'Salvataggio…', saved: '✓ Salvato', profiloDesc: 'Dati utilizzati per fatturazione, spedizioni e comunicazioni ordini.' },
-  zh: { catalog: '商品目录', myOrders: '我的订单', profilo: '我的资料', search: '搜索编号 / 商品名 / 条形码…', all: '全部', cart: '购物车', stock: '库存', total: '合计', submit: '提交订单', submitting: '提交中…', sent: '下单成功！', empty: '购物车为空', note: '备注', notePh: '如：请尽快发货…', logout: '退出', noProducts: '暂无商品', noOrders: '暂无订单', addToCart: '加入', items: '种商品', qty: '数量', mobileVer: '手机版', backCatalog: '继续选购', remove: '移除', checkout: '去购物车', save: '保存', saving: '保存中…', saved: '✓ 已保存', profiloDesc: '用于开票、物流发货和订单通知的信息。' },
+  it: { invoiceRequired: 'Completa i dati di fatturazione prima di ordinare', goProfile: 'Completa il profilo', profileIncompleteHint: 'Per emettere la fattura elettronica servono: Ragione Sociale, P.IVA, indirizzo, CAP, città, provincia e Codice SDI o PEC.', catalog: 'Catalogo', myOrders: 'I miei ordini', profilo: 'Profilo', search: 'Cerca per codice / nome / barcode…', all: 'Tutti', cart: 'Carrello', stock: 'Disponibilità', total: 'Totale', submit: 'Invia ordine', submitting: 'Invio…', sent: 'Ordine inviato!', empty: 'Il carrello è vuoto', note: 'Note', notePh: 'Es. consegnare al più presto…', logout: 'Esci', noProducts: 'Nessun prodotto disponibile', noOrders: 'Nessun ordine', addToCart: 'Aggiungi', items: 'articoli', qty: 'Q.tà', mobileVer: '手机版', backCatalog: 'Continua acquisti', remove: 'Rimuovi', checkout: 'Vai al carrello', save: 'Salva', saving: 'Salvataggio…', saved: '✓ Salvato', profiloDesc: 'Dati utilizzati per fatturazione, spedizioni e comunicazioni ordini.' },
+  zh: { invoiceRequired: '下单前请先填写开票资料', goProfile: '去完善资料', profileIncompleteHint: '开电子发票需填写：公司名、P.IVA、地址、CAP、城市、省份，以及 Codice SDI 或 PEC。', catalog: '商品目录', myOrders: '我的订单', profilo: '我的资料', search: '搜索编号 / 商品名 / 条形码…', all: '全部', cart: '购物车', stock: '库存', total: '合计', submit: '提交订单', submitting: '提交中…', sent: '下单成功！', empty: '购物车为空', note: '备注', notePh: '如：请尽快发货…', logout: '退出', noProducts: '暂无商品', noOrders: '暂无订单', addToCart: '加入', items: '种商品', qty: '数量', mobileVer: '手机版', backCatalog: '继续选购', remove: '移除', checkout: '去购物车', save: '保存', saving: '保存中…', saved: '✓ 已保存', profiloDesc: '用于开票、物流发货和订单通知的信息。' },
 }
 const STATUS: Record<Lang, Record<string, string>> = {
   it: { pending_review: 'In revisione', pending: 'In attesa di conferma', confirmed: 'Confermato', shipped: 'Spedito', completed: 'Completato', cancelled: 'Annullato' },
@@ -144,6 +144,11 @@ export default function B2BPage() {
 
   async function placeOrder() {
     if (!user || cart.length === 0) return
+    if (invoiceIncomplete) {
+      showToast(t.invoiceRequired)
+      setCartOpen(false); setView('profilo')
+      return
+    }
     setPlacing(true)
     await store.createOrder(user.id, user.name, cart, cartProductList, user.wholesalerId!, remark)
     setCart([]); setRemark(''); setCartOpen(false); setCartProductsCache({})
@@ -155,12 +160,25 @@ export default function B2BPage() {
   async function saveProfile() {
     if (!user) return
     setProfileSaving(true)
-    await store.saveBuyerProfile({ userId: user.id, ...profileForm })
+    const saved = { userId: user.id, ...profileForm }
+    await store.saveBuyerProfile(saved)
+    setProfile(saved)
     setProfileSaved(true); setTimeout(() => setProfileSaved(false), 3000)
     setProfileSaving(false)
   }
 
   function logout() { store.setCurrentUser(null); router.push('/entry') }
+
+  // 开电子发票必填项校验：公司名、P.IVA、地址、CAP、城市、省份，且 SDI 或 PEC 至少一个
+  const invoiceMissing = (() => {
+    const p = profile
+    const req: (keyof BuyerProfile)[] = ['ragioneSociale', 'piva', 'indirizzoFattura', 'capFattura', 'cittaFattura', 'provinciaFattura']
+    if (!p) return req as string[]
+    const missing = req.filter(k => !((p[k] as string | undefined) || '').trim()) as string[]
+    if (!((p.codiceSdi || '').trim() || (p.pec || '').trim())) missing.push('sdi/pec')
+    return missing
+  })()
+  const invoiceIncomplete = invoiceMissing.length > 0
 
   const cartCount = cart.reduce((s, i) => s + i.quantity, 0)
   const cartTotal = cart.reduce((s, i) => {
@@ -407,21 +425,22 @@ export default function B2BPage() {
 
             {/* Dati fatturazione */}
             <section className="bg-white rounded-2xl p-5 shadow-sm">
-              <h3 className="font-bold text-gray-800 mb-4 flex items-center gap-2"><Receipt className="w-4 h-4 text-orange-500" strokeWidth={1.75} /> {lang === 'it' ? 'Dati fatturazione' : '开票信息'}</h3>
+              <h3 className="font-bold text-gray-800 mb-2 flex items-center gap-2"><Receipt className="w-4 h-4 text-orange-500" strokeWidth={1.75} /> {lang === 'it' ? 'Dati fatturazione' : '开票信息'}</h3>
+              <p className="text-xs text-gray-500 mb-4">{lang === 'it' ? '“*” obbligatori per la fattura elettronica. SDI o PEC: almeno uno.' : '带 * 为开电子发票必填，Codice SDI 与 PEC 至少填一个。'}</p>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 {[
-                  { key: 'ragioneSociale', label: lang === 'it' ? 'Ragione Sociale' : '公司名称', full: true },
-                  { key: 'piva', label: 'P.IVA' },
+                  { key: 'ragioneSociale', label: lang === 'it' ? 'Ragione Sociale' : '公司名称', full: true, req: true },
+                  { key: 'piva', label: 'P.IVA', req: true },
                   { key: 'codiceFiscale', label: lang === 'it' ? 'Codice Fiscale' : '税号' },
-                  { key: 'indirizzoFattura', label: lang === 'it' ? 'Indirizzo' : '地址', full: true },
-                  { key: 'capFattura', label: 'CAP' },
-                  { key: 'cittaFattura', label: lang === 'it' ? 'Città' : '城市' },
-                  { key: 'provinciaFattura', label: lang === 'it' ? 'Provincia' : '省份', placeholder: 'es. NA' },
-                  { key: 'codiceSdi', label: 'Codice SDI', placeholder: '7 caratteri' },
-                  { key: 'pec', label: 'PEC', placeholder: 'fattura@pec.it' },
+                  { key: 'indirizzoFattura', label: lang === 'it' ? 'Indirizzo' : '地址', full: true, req: true },
+                  { key: 'capFattura', label: 'CAP', req: true },
+                  { key: 'cittaFattura', label: lang === 'it' ? 'Città' : '城市', req: true },
+                  { key: 'provinciaFattura', label: lang === 'it' ? 'Provincia' : '省份', placeholder: 'es. NA', req: true },
+                  { key: 'codiceSdi', label: 'Codice SDI', placeholder: '7 caratteri', req: true },
+                  { key: 'pec', label: 'PEC', placeholder: 'fattura@pec.it', req: true },
                 ].map(f => (
                   <div key={f.key} className={f.full ? 'sm:col-span-2' : ''}>
-                    <label className="text-xs font-medium text-gray-500 block mb-1">{f.label}</label>
+                    <label className="text-xs font-medium text-gray-500 block mb-1">{f.label}{f.req && <span className="text-orange-500"> *</span>}</label>
                     <input
                       value={(profileForm as any)[f.key] || ''}
                       onChange={e => setProfileForm(pf => ({ ...pf, [f.key]: e.target.value }))}
@@ -605,13 +624,25 @@ export default function B2BPage() {
                 </div>
 
                 <div className="border-t border-gray-200 p-5 shrink-0">
+                  {invoiceIncomplete && (
+                    <div className="mb-3 bg-orange-50 border border-orange-200 rounded-xl p-3">
+                      <div className="flex items-start gap-2 text-sm text-orange-700">
+                        <Receipt className="w-4 h-4 mt-0.5 shrink-0" strokeWidth={1.75} />
+                        <span>{t.profileIncompleteHint}</span>
+                      </div>
+                      <button onClick={() => { setCartOpen(false); setView('profilo') }}
+                        className="mt-2 w-full py-2 bg-orange-100 text-orange-700 text-sm font-medium rounded-lg hover:bg-orange-200">
+                        {t.goProfile} →
+                      </button>
+                    </div>
+                  )}
                   <div className="flex items-center justify-between mb-3">
                     <span className="text-gray-500">{t.total}</span>
                     <span className="text-2xl font-bold text-orange-500">€{cartTotal.toFixed(2)}</span>
                   </div>
                   <button onClick={placeOrder} disabled={placing}
                     className="w-full py-3.5 bg-orange-500 text-white font-semibold rounded-xl hover:bg-orange-600 disabled:opacity-60">
-                    {placing ? t.submitting : t.submit}
+                    {placing ? t.submitting : invoiceIncomplete ? t.invoiceRequired : t.submit}
                   </button>
                 </div>
               </>
