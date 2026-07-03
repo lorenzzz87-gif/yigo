@@ -14,6 +14,8 @@ import {
   CheckCircle2,
   LogOut,
   ClipboardList,
+  Pencil,
+  AlertCircle,
 } from 'lucide-react'
 import { store, User, Product, Category, Order, BuyerProfile } from '@/lib/store'
 
@@ -63,6 +65,8 @@ export default function B2BPage() {
   const [profileForm, setProfileForm] = useState<Omit<BuyerProfile, 'userId'>>({})
   const [profileSaving, setProfileSaving] = useState(false)
   const [profileSaved, setProfileSaved] = useState(false)
+  const [profileLocked, setProfileLocked] = useState(false)
+  const [showProfileErrors, setShowProfileErrors] = useState(false)
 
   const t = T[lang]
 
@@ -78,6 +82,7 @@ export default function B2BPage() {
       const p = prof || { userId: u.id }
       setProfile(p)
       setProfileForm({ ragioneSociale: p.ragioneSociale, piva: p.piva, codiceFiscale: p.codiceFiscale, indirizzoFattura: p.indirizzoFattura, capFattura: p.capFattura, cittaFattura: p.cittaFattura, provinciaFattura: p.provinciaFattura, codiceSdi: p.codiceSdi, pec: p.pec, indirizzoSpedizione: p.indirizzoSpedizione, capSpedizione: p.capSpedizione, cittaSpedizione: p.cittaSpedizione, noteConsegna: p.noteConsegna, emailOrdini: p.emailOrdini, telefono: p.telefono })
+      setProfileLocked(missingRequired(p).length === 0)
     })
     loadProducts(u.wholesalerId, '', 0, undefined)
   }, [router])
@@ -159,26 +164,34 @@ export default function B2BPage() {
 
   async function saveProfile() {
     if (!user) return
+    if (missingRequired(profileForm).length > 0) {
+      setShowProfileErrors(true)
+      showToast(lang === 'it' ? 'Compila i campi obbligatori (*)' : '请填写带 * 的必填项')
+      return
+    }
+    setShowProfileErrors(false)
     setProfileSaving(true)
     const saved = { userId: user.id, ...profileForm }
     await store.saveBuyerProfile(saved)
     setProfile(saved)
-    setProfileSaved(true); setTimeout(() => setProfileSaved(false), 3000)
     setProfileSaving(false)
+    setProfileLocked(true)
+    showToast(lang === 'it' ? 'Profilo salvato con successo!' : '资料保存成功！')
   }
 
   function logout() { store.setCurrentUser(null); router.push('/entry') }
 
-  // 开电子发票必填项校验：公司名、P.IVA、地址、CAP、城市、省份，且 SDI 或 PEC 至少一个
-  const invoiceMissing = (() => {
-    const p = profile
-    const req: (keyof BuyerProfile)[] = ['ragioneSociale', 'piva', 'indirizzoFattura', 'capFattura', 'cittaFattura', 'provinciaFattura', 'telefono']
-    if (!p) return req as string[]
-    const missing = req.filter(k => !((p[k] as string | undefined) || '').trim()) as string[]
-    if (!((p.codiceSdi || '').trim() || (p.pec || '').trim())) missing.push('sdi/pec')
+  // 开电子发票必填项校验：公司名、P.IVA、地址、CAP、城市、省份、电话，且 SDI 或 PEC 至少一个
+  function missingRequired(p: Partial<BuyerProfile> | null | undefined): string[] {
+    const req = ['ragioneSociale', 'piva', 'indirizzoFattura', 'capFattura', 'cittaFattura', 'provinciaFattura', 'telefono']
+    const src = (p || {}) as Record<string, string | undefined>
+    const missing = req.filter(k => !((src[k] || '').trim()))
+    if (!((src.codiceSdi || '').trim() || (src.pec || '').trim())) missing.push('sdi/pec')
     return missing
-  })()
-  const invoiceIncomplete = invoiceMissing.length > 0
+  }
+  const invoiceIncomplete = missingRequired(profile).length > 0
+  const liveMissing = missingRequired(profileForm)
+  const fieldErr = (key: string) => showProfileErrors && (liveMissing.includes(key) || ((key === 'codiceSdi' || key === 'pec') && liveMissing.includes('sdi/pec')))
 
   const cartCount = cart.reduce((s, i) => s + i.quantity, 0)
   const cartTotal = cart.reduce((s, i) => {
@@ -423,82 +436,160 @@ export default function B2BPage() {
           <div className="max-w-2xl space-y-5">
             <p className="text-sm text-gray-600">{t.profiloDesc}</p>
 
-            {/* Dati fatturazione */}
-            <section className="bg-white rounded-2xl p-5 shadow-sm">
-              <h3 className="font-bold text-gray-800 mb-2 flex items-center gap-2"><Receipt className="w-4 h-4 text-orange-500" strokeWidth={1.75} /> {lang === 'it' ? 'Dati fatturazione' : '开票信息'}</h3>
-              <p className="text-xs text-gray-500 mb-4">{lang === 'it' ? '“*” obbligatori per la fattura elettronica. SDI o PEC: almeno uno.' : '带 * 为开电子发票必填，Codice SDI 与 PEC 至少填一个。'}</p>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            {profileLocked ? (
+              /* ─────────── 已保存：只读卡片 + 修改按钮 ─────────── */
+              <>
                 {[
-                  { key: 'ragioneSociale', label: lang === 'it' ? 'Ragione Sociale' : '公司名称', full: true, req: true },
-                  { key: 'piva', label: 'P.IVA', req: true },
-                  { key: 'codiceFiscale', label: lang === 'it' ? 'Codice Fiscale' : '税号' },
-                  { key: 'indirizzoFattura', label: lang === 'it' ? 'Indirizzo' : '地址', full: true, req: true },
-                  { key: 'capFattura', label: 'CAP', req: true },
-                  { key: 'cittaFattura', label: lang === 'it' ? 'Città' : '城市', req: true },
-                  { key: 'provinciaFattura', label: lang === 'it' ? 'Provincia' : '省份', placeholder: 'es. NA', req: true },
-                  { key: 'codiceSdi', label: 'Codice SDI', placeholder: '7 caratteri', req: true },
-                  { key: 'pec', label: 'PEC', placeholder: 'fattura@pec.it', req: true },
-                ].map(f => (
-                  <div key={f.key} className={f.full ? 'sm:col-span-2' : ''}>
-                    <label className="text-xs font-medium text-gray-500 block mb-1">{f.label}{f.req && <span className="text-orange-500"> *</span>}</label>
-                    <input
-                      value={(profileForm as any)[f.key] || ''}
-                      onChange={e => setProfileForm(pf => ({ ...pf, [f.key]: e.target.value }))}
-                      placeholder={f.placeholder || ''}
-                      className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm text-gray-800 outline-none focus:border-orange-400 focus:ring-1 focus:ring-orange-200 transition"
-                    />
+                  {
+                    icon: <Receipt className="w-4 h-4 text-orange-500" strokeWidth={1.75} />,
+                    title: lang === 'it' ? 'Dati fatturazione' : '开票信息',
+                    rows: [
+                      [lang === 'it' ? 'Ragione Sociale' : '公司名称', profile?.ragioneSociale],
+                      ['P.IVA', profile?.piva],
+                      [lang === 'it' ? 'Codice Fiscale' : '税号', profile?.codiceFiscale],
+                      [lang === 'it' ? 'Indirizzo' : '地址', profile?.indirizzoFattura],
+                      ['CAP', profile?.capFattura],
+                      [lang === 'it' ? 'Città' : '城市', profile?.cittaFattura],
+                      [lang === 'it' ? 'Provincia' : '省份', profile?.provinciaFattura],
+                      ['Codice SDI', profile?.codiceSdi],
+                      ['PEC', profile?.pec],
+                    ],
+                  },
+                  {
+                    icon: <Truck className="w-4 h-4 text-orange-500" strokeWidth={1.75} />,
+                    title: lang === 'it' ? 'Indirizzo spedizione' : '收货地址',
+                    rows: [
+                      [lang === 'it' ? 'Indirizzo' : '地址', profile?.indirizzoSpedizione],
+                      ['CAP', profile?.capSpedizione],
+                      [lang === 'it' ? 'Città' : '城市', profile?.cittaSpedizione],
+                      [lang === 'it' ? 'Note di consegna' : '收货备注', profile?.noteConsegna],
+                    ],
+                  },
+                  {
+                    icon: <Mail className="w-4 h-4 text-orange-500" strokeWidth={1.75} />,
+                    title: lang === 'it' ? 'Contatti per ordini' : '订单联系方式',
+                    rows: [
+                      [lang === 'it' ? 'Email' : '订单邮箱', profile?.emailOrdini],
+                      [lang === 'it' ? 'Numero di contatto' : '联系电话', profile?.telefono],
+                    ],
+                  },
+                ].map((sec, si) => {
+                  const filled = sec.rows.filter(([, v]) => (v || '').trim())
+                  if (filled.length === 0) return null
+                  return (
+                    <section key={si} className="bg-white rounded-2xl p-5 shadow-sm">
+                      <div className="flex items-center justify-between mb-3">
+                        <h3 className="font-bold text-gray-800 flex items-center gap-2">{sec.icon} {sec.title}</h3>
+                        {si === 0 && (
+                          <span className="inline-flex items-center gap-1 text-xs font-medium text-green-600 bg-green-50 px-2 py-1 rounded-full">
+                            <CheckCircle2 className="w-3.5 h-3.5" strokeWidth={2} /> {lang === 'it' ? 'Completo' : '已完善'}
+                          </span>
+                        )}
+                      </div>
+                      <dl className="divide-y divide-gray-100">
+                        {filled.map(([label, value], ri) => (
+                          <div key={ri} className="flex justify-between gap-4 py-2">
+                            <dt className="text-xs text-gray-500 shrink-0 pt-0.5">{label}</dt>
+                            <dd className="text-sm text-gray-900 font-medium text-right break-all">{value}</dd>
+                          </div>
+                        ))}
+                      </dl>
+                    </section>
+                  )
+                })}
+                <button onClick={() => { setProfileLocked(false); setShowProfileErrors(false) }}
+                  className="w-full py-3 border-2 border-orange-500 text-orange-600 font-semibold rounded-2xl hover:bg-orange-50 transition flex items-center justify-center gap-2">
+                  <Pencil className="w-4 h-4" strokeWidth={1.75} /> {lang === 'it' ? 'Modifica dati' : '修改资料'}
+                </button>
+              </>
+            ) : (
+              /* ─────────── 编辑态：表单 + 校验 ─────────── */
+              <>
+                {showProfileErrors && liveMissing.length > 0 && (
+                  <div className="bg-red-50 border border-red-200 rounded-xl p-3 text-sm text-red-600 flex items-start gap-2">
+                    <AlertCircle className="w-4 h-4 mt-0.5 shrink-0" strokeWidth={1.75} />
+                    {lang === 'it' ? 'Compila tutti i campi contrassegnati con *' : '请填写所有带 * 的必填项'}
                   </div>
-                ))}
-              </div>
-            </section>
+                )}
 
-            {/* Indirizzo spedizione */}
-            <section className="bg-white rounded-2xl p-5 shadow-sm">
-              <h3 className="font-bold text-gray-800 mb-1 flex items-center gap-2"><Truck className="w-4 h-4 text-orange-500" strokeWidth={1.75} /> {lang === 'it' ? 'Indirizzo spedizione' : '收货地址'}</h3>
-              <p className="text-xs text-gray-500 mb-4">{lang === 'it' ? 'Lascia vuoto se uguale alla fatturazione.' : '如与开票地址相同可留空。'}</p>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                {[
-                  { key: 'indirizzoSpedizione', label: lang === 'it' ? 'Indirizzo' : '地址', full: true },
-                  { key: 'capSpedizione', label: 'CAP' },
-                  { key: 'cittaSpedizione', label: lang === 'it' ? 'Città' : '城市' },
-                  { key: 'noteConsegna', label: lang === 'it' ? 'Note di consegna' : '收货备注', full: true, placeholder: lang === 'it' ? 'es. chiamare prima della consegna' : '如：请提前联系' },
-                ].map(f => (
-                  <div key={f.key} className={f.full ? 'sm:col-span-2' : ''}>
-                    <label className="text-xs font-medium text-gray-500 block mb-1">{f.label}</label>
-                    <input
-                      value={(profileForm as any)[f.key] || ''}
-                      onChange={e => setProfileForm(pf => ({ ...pf, [f.key]: e.target.value }))}
-                      placeholder={f.placeholder || ''}
-                      className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm text-gray-800 outline-none focus:border-orange-400 focus:ring-1 focus:ring-orange-200 transition"
-                    />
+                {/* Dati fatturazione */}
+                <section className="bg-white rounded-2xl p-5 shadow-sm">
+                  <h3 className="font-bold text-gray-800 mb-2 flex items-center gap-2"><Receipt className="w-4 h-4 text-orange-500" strokeWidth={1.75} /> {lang === 'it' ? 'Dati fatturazione' : '开票信息'}</h3>
+                  <p className="text-xs text-gray-500 mb-4">{lang === 'it' ? '“*” obbligatori per la fattura elettronica. SDI o PEC: almeno uno.' : '带 * 为开电子发票必填，Codice SDI 与 PEC 至少填一个。'}</p>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    {[
+                      { key: 'ragioneSociale', label: lang === 'it' ? 'Ragione Sociale' : '公司名称', full: true, req: true },
+                      { key: 'piva', label: 'P.IVA', req: true },
+                      { key: 'codiceFiscale', label: lang === 'it' ? 'Codice Fiscale' : '税号' },
+                      { key: 'indirizzoFattura', label: lang === 'it' ? 'Indirizzo' : '地址', full: true, req: true },
+                      { key: 'capFattura', label: 'CAP', req: true },
+                      { key: 'cittaFattura', label: lang === 'it' ? 'Città' : '城市', req: true },
+                      { key: 'provinciaFattura', label: lang === 'it' ? 'Provincia' : '省份', placeholder: 'es. NA', req: true },
+                      { key: 'codiceSdi', label: 'Codice SDI', placeholder: '7 caratteri', req: true },
+                      { key: 'pec', label: 'PEC', placeholder: 'fattura@pec.it', req: true },
+                    ].map(f => (
+                      <div key={f.key} className={f.full ? 'sm:col-span-2' : ''}>
+                        <label className="text-xs font-medium text-gray-500 block mb-1">{f.label}{f.req && <span className="text-orange-500"> *</span>}</label>
+                        <input
+                          value={(profileForm as any)[f.key] || ''}
+                          onChange={e => setProfileForm(pf => ({ ...pf, [f.key]: e.target.value }))}
+                          placeholder={f.placeholder || ''}
+                          className={`w-full border rounded-xl px-3 py-2 text-sm text-gray-800 outline-none focus:ring-1 transition ${fieldErr(f.key) ? 'border-red-400 focus:border-red-400 focus:ring-red-200' : 'border-gray-200 focus:border-orange-400 focus:ring-orange-200'}`}
+                        />
+                      </div>
+                    ))}
                   </div>
-                ))}
-              </div>
-            </section>
+                </section>
 
-            {/* Contatti ordini */}
-            <section className="bg-white rounded-2xl p-5 shadow-sm">
-              <h3 className="font-bold text-gray-800 mb-4 flex items-center gap-2"><Mail className="w-4 h-4 text-orange-500" strokeWidth={1.75} /> {lang === 'it' ? 'Contatti per ordini' : '订单联系方式'}</h3>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div className="sm:col-span-2">
-                  <label className="text-xs font-medium text-gray-500 block mb-1">{lang === 'it' ? 'Email per conferme ordine' : '接收订单确认邮箱'}</label>
-                  <input type="email" value={profileForm.emailOrdini || ''} onChange={e => setProfileForm(pf => ({ ...pf, emailOrdini: e.target.value }))}
-                    placeholder="ordini@miazienda.it"
-                    className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm text-gray-800 outline-none focus:border-orange-400 focus:ring-1 focus:ring-orange-200 transition" />
-                </div>
-                <div className="sm:col-span-2">
-                  <label className="text-xs font-medium text-gray-500 block mb-1">{lang === 'it' ? 'Numero di contatto' : '联系电话'}<span className="text-orange-500"> *</span></label>
-                  <input type="tel" value={profileForm.telefono || ''} onChange={e => setProfileForm(pf => ({ ...pf, telefono: e.target.value }))}
-                    placeholder="+39 333 1234567"
-                    className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm text-gray-800 outline-none focus:border-orange-400 focus:ring-1 focus:ring-orange-200 transition" />
-                </div>
-              </div>
-            </section>
+                {/* Indirizzo spedizione */}
+                <section className="bg-white rounded-2xl p-5 shadow-sm">
+                  <h3 className="font-bold text-gray-800 mb-1 flex items-center gap-2"><Truck className="w-4 h-4 text-orange-500" strokeWidth={1.75} /> {lang === 'it' ? 'Indirizzo spedizione' : '收货地址'}</h3>
+                  <p className="text-xs text-gray-500 mb-4">{lang === 'it' ? 'Lascia vuoto se uguale alla fatturazione.' : '如与开票地址相同可留空。'}</p>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    {[
+                      { key: 'indirizzoSpedizione', label: lang === 'it' ? 'Indirizzo' : '地址', full: true },
+                      { key: 'capSpedizione', label: 'CAP' },
+                      { key: 'cittaSpedizione', label: lang === 'it' ? 'Città' : '城市' },
+                      { key: 'noteConsegna', label: lang === 'it' ? 'Note di consegna' : '收货备注', full: true, placeholder: lang === 'it' ? 'es. chiamare prima della consegna' : '如：请提前联系' },
+                    ].map(f => (
+                      <div key={f.key} className={f.full ? 'sm:col-span-2' : ''}>
+                        <label className="text-xs font-medium text-gray-500 block mb-1">{f.label}</label>
+                        <input
+                          value={(profileForm as any)[f.key] || ''}
+                          onChange={e => setProfileForm(pf => ({ ...pf, [f.key]: e.target.value }))}
+                          placeholder={f.placeholder || ''}
+                          className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm text-gray-800 outline-none focus:border-orange-400 focus:ring-1 focus:ring-orange-200 transition"
+                        />
+                      </div>
+                    ))}
+                  </div>
+                </section>
 
-            <button onClick={saveProfile} disabled={profileSaving}
-              className="w-full py-3.5 bg-orange-500 text-white font-semibold rounded-2xl hover:bg-orange-600 disabled:opacity-60 transition text-base">
-              {profileSaved ? t.saved : profileSaving ? t.saving : t.save}
-            </button>
+                {/* Contatti ordini */}
+                <section className="bg-white rounded-2xl p-5 shadow-sm">
+                  <h3 className="font-bold text-gray-800 mb-4 flex items-center gap-2"><Mail className="w-4 h-4 text-orange-500" strokeWidth={1.75} /> {lang === 'it' ? 'Contatti per ordini' : '订单联系方式'}</h3>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div className="sm:col-span-2">
+                      <label className="text-xs font-medium text-gray-500 block mb-1">{lang === 'it' ? 'Email per conferme ordine' : '接收订单确认邮箱'}</label>
+                      <input type="email" value={profileForm.emailOrdini || ''} onChange={e => setProfileForm(pf => ({ ...pf, emailOrdini: e.target.value }))}
+                        placeholder="ordini@miazienda.it"
+                        className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm text-gray-800 outline-none focus:border-orange-400 focus:ring-1 focus:ring-orange-200 transition" />
+                    </div>
+                    <div className="sm:col-span-2">
+                      <label className="text-xs font-medium text-gray-500 block mb-1">{lang === 'it' ? 'Numero di contatto' : '联系电话'}<span className="text-orange-500"> *</span></label>
+                      <input type="tel" value={profileForm.telefono || ''} onChange={e => setProfileForm(pf => ({ ...pf, telefono: e.target.value }))}
+                        placeholder="+39 333 1234567"
+                        className={`w-full border rounded-xl px-3 py-2 text-sm text-gray-800 outline-none focus:ring-1 transition ${fieldErr('telefono') ? 'border-red-400 focus:border-red-400 focus:ring-red-200' : 'border-gray-200 focus:border-orange-400 focus:ring-orange-200'}`} />
+                    </div>
+                  </div>
+                </section>
+
+                <button onClick={saveProfile} disabled={profileSaving}
+                  className="w-full py-3.5 bg-orange-500 text-white font-semibold rounded-2xl hover:bg-orange-600 disabled:opacity-60 transition text-base">
+                  {profileSaving ? t.saving : t.save}
+                </button>
+              </>
+            )}
           </div>
         )}
       </div>
