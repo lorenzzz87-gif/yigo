@@ -20,8 +20,8 @@ import { store, User, Product, Category, Order, BuyerProfile } from '@/lib/store
 type Lang = 'it' | 'zh'
 
 const T: Record<Lang, Record<string, string>> = {
-  it: { invoiceRequired: 'Completa i dati di fatturazione prima di ordinare', goProfile: 'Completa il profilo', profileIncompleteHint: 'Per emettere la fattura elettronica servono: Ragione Sociale, P.IVA, indirizzo, CAP, città, provincia e Codice SDI o PEC.', catalog: 'Catalogo', myOrders: 'I miei ordini', profilo: 'Profilo', search: 'Cerca per codice / nome / barcode…', all: 'Tutti', cart: 'Carrello', stock: 'Disponibilità', total: 'Totale', submit: 'Invia ordine', submitting: 'Invio…', sent: 'Ordine inviato!', empty: 'Il carrello è vuoto', note: 'Note', notePh: 'Es. consegnare al più presto…', logout: 'Esci', noProducts: 'Nessun prodotto disponibile', noOrders: 'Nessun ordine', addToCart: 'Aggiungi', items: 'articoli', qty: 'Q.tà', mobileVer: '手机版', backCatalog: 'Continua acquisti', remove: 'Rimuovi', checkout: 'Vai al carrello', save: 'Salva', saving: 'Salvataggio…', saved: '✓ Salvato', profiloDesc: 'Dati utilizzati per fatturazione, spedizioni e comunicazioni ordini.' },
-  zh: { invoiceRequired: '下单前请先填写开票资料', goProfile: '去完善资料', profileIncompleteHint: '开电子发票需填写：公司名、P.IVA、地址、CAP、城市、省份，以及 Codice SDI 或 PEC。', catalog: '商品目录', myOrders: '我的订单', profilo: '我的资料', search: '搜索编号 / 商品名 / 条形码…', all: '全部', cart: '购物车', stock: '库存', total: '合计', submit: '提交订单', submitting: '提交中…', sent: '下单成功！', empty: '购物车为空', note: '备注', notePh: '如：请尽快发货…', logout: '退出', noProducts: '暂无商品', noOrders: '暂无订单', addToCart: '加入', items: '种商品', qty: '数量', mobileVer: '手机版', backCatalog: '继续选购', remove: '移除', checkout: '去购物车', save: '保存', saving: '保存中…', saved: '✓ 已保存', profiloDesc: '用于开票、物流发货和订单通知的信息。' },
+  it: { invoiceRequired: 'Completa i dati di fatturazione prima di ordinare', goProfile: 'Completa il profilo', profileIncompleteHint: 'Per emettere la fattura elettronica servono: Ragione Sociale, P.IVA, indirizzo, CAP, città, provincia, Codice SDI o PEC e un numero di telefono.', catalog: 'Catalogo', myOrders: 'I miei ordini', profilo: 'Profilo', search: 'Cerca per codice / nome / barcode…', all: 'Tutti', cart: 'Carrello', stock: 'Disponibilità', total: 'Totale', submit: 'Invia ordine', submitting: 'Invio…', sent: 'Ordine inviato!', empty: 'Il carrello è vuoto', note: 'Note', notePh: 'Es. consegnare al più presto…', logout: 'Esci', noProducts: 'Nessun prodotto disponibile', noOrders: 'Nessun ordine', addToCart: 'Aggiungi', items: 'articoli', qty: 'Q.tà', mobileVer: '手机版', backCatalog: 'Continua acquisti', remove: 'Rimuovi', checkout: 'Vai al carrello', save: 'Salva', saving: 'Salvataggio…', saved: '✓ Salvato', profiloDesc: 'Dati utilizzati per fatturazione, spedizioni e comunicazioni ordini.' },
+  zh: { invoiceRequired: '下单前请先填写开票资料', goProfile: '去完善资料', profileIncompleteHint: '开电子发票需填写：公司名、P.IVA、地址、CAP、城市、省份、Codice SDI 或 PEC，以及联系电话。', catalog: '商品目录', myOrders: '我的订单', profilo: '我的资料', search: '搜索编号 / 商品名 / 条形码…', all: '全部', cart: '购物车', stock: '库存', total: '合计', submit: '提交订单', submitting: '提交中…', sent: '下单成功！', empty: '购物车为空', note: '备注', notePh: '如：请尽快发货…', logout: '退出', noProducts: '暂无商品', noOrders: '暂无订单', addToCart: '加入', items: '种商品', qty: '数量', mobileVer: '手机版', backCatalog: '继续选购', remove: '移除', checkout: '去购物车', save: '保存', saving: '保存中…', saved: '✓ 已保存', profiloDesc: '用于开票、物流发货和订单通知的信息。' },
 }
 const STATUS: Record<Lang, Record<string, string>> = {
   it: { pending_review: 'In revisione', pending: 'In attesa di conferma', confirmed: 'Confermato', shipped: 'Spedito', completed: 'Completato', cancelled: 'Annullato' },
@@ -172,7 +172,7 @@ export default function B2BPage() {
   // 开电子发票必填项校验：公司名、P.IVA、地址、CAP、城市、省份，且 SDI 或 PEC 至少一个
   const invoiceMissing = (() => {
     const p = profile
-    const req: (keyof BuyerProfile)[] = ['ragioneSociale', 'piva', 'indirizzoFattura', 'capFattura', 'cittaFattura', 'provinciaFattura']
+    const req: (keyof BuyerProfile)[] = ['ragioneSociale', 'piva', 'indirizzoFattura', 'capFattura', 'cittaFattura', 'provinciaFattura', 'telefono']
     if (!p) return req as string[]
     const missing = req.filter(k => !((p[k] as string | undefined) || '').trim()) as string[]
     if (!((p.codiceSdi || '').trim() || (p.pec || '').trim())) missing.push('sdi/pec')
@@ -487,7 +487,7 @@ export default function B2BPage() {
                     className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm text-gray-800 outline-none focus:border-orange-400 focus:ring-1 focus:ring-orange-200 transition" />
                 </div>
                 <div className="sm:col-span-2">
-                  <label className="text-xs font-medium text-gray-500 block mb-1">{lang === 'it' ? 'Numero di contatto' : '联系电话'}</label>
+                  <label className="text-xs font-medium text-gray-500 block mb-1">{lang === 'it' ? 'Numero di contatto' : '联系电话'}<span className="text-orange-500"> *</span></label>
                   <input type="tel" value={profileForm.telefono || ''} onChange={e => setProfileForm(pf => ({ ...pf, telefono: e.target.value }))}
                     placeholder="+39 333 1234567"
                     className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm text-gray-800 outline-none focus:border-orange-400 focus:ring-1 focus:ring-orange-200 transition" />
