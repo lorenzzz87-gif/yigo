@@ -81,7 +81,9 @@ export default function B2BPage() {
       if (logo) setWholesalerLogo(logo)
       const p = prof || { userId: u.id }
       setProfile(p)
-      setProfileForm({ ragioneSociale: p.ragioneSociale, piva: p.piva, codiceFiscale: p.codiceFiscale, indirizzoFattura: p.indirizzoFattura, capFattura: p.capFattura, cittaFattura: p.cittaFattura, provinciaFattura: p.provinciaFattura, codiceSdi: p.codiceSdi, pec: p.pec, indirizzoSpedizione: p.indirizzoSpedizione, capSpedizione: p.capSpedizione, cittaSpedizione: p.cittaSpedizione, noteConsegna: p.noteConsegna, emailOrdini: p.emailOrdini, telefono: p.telefono })
+      // 联系电话默认用注册手机号（用户未单独填写时）
+      const telefono = p.telefono || u.phone || ''
+      setProfileForm({ ragioneSociale: p.ragioneSociale, piva: p.piva, codiceFiscale: p.codiceFiscale, indirizzoFattura: p.indirizzoFattura, capFattura: p.capFattura, cittaFattura: p.cittaFattura, provinciaFattura: p.provinciaFattura, codiceSdi: p.codiceSdi, pec: p.pec, indirizzoSpedizione: p.indirizzoSpedizione, capSpedizione: p.capSpedizione, cittaSpedizione: p.cittaSpedizione, noteConsegna: p.noteConsegna, emailOrdini: p.emailOrdini, telefono })
       setProfileLocked(missingRequired(p).length === 0)
     })
     loadProducts(u.wholesalerId, '', 0, undefined)

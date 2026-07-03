@@ -54,7 +54,6 @@ export default function B2BLoginPage() {
     if (!name || !phone || !password) { setError('Compila tutti i campi · 请填写所有字段'); return }
     if (password.length < 6) { setError('Password minimo 6 caratteri · 密码至少6位'); return }
     if (!inviteCode || !inviteTempPwd) { setError('Inserisci il codice fornitore · 请输入批发商给你的商家号'); return }
-    if (!phone && !email) { setError('手机号或邮箱至少填一个'); return }
     setLoading(true); setError('')
     const result = await store.registerBuyer(name, phone, password, inviteCode, inviteTempPwd, email)
     setLoading(false)
@@ -171,11 +170,11 @@ export default function B2BLoginPage() {
             <div className="space-y-4">
               {mode === 'register' && (
                 <div>
-                  <label className="text-xs font-medium text-gray-500 block mb-1.5">姓名 / Nome negozio</label>
+                  <label className="text-xs font-medium text-gray-500 block mb-1.5">Nome negozio · 店铺名 <span className="text-orange-500">*</span></label>
                   <div className="relative">
                     <UserIcon className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-300" strokeWidth={1.75} />
                     <input value={name} onChange={e => setName(e.target.value)}
-                      placeholder="您的姓名或店铺名"
+                      placeholder="Nome o ragione sociale · 姓名或店铺名"
                       className={`w-full border border-gray-200 rounded-xl pl-10 pr-4 py-3 text-sm outline-none focus:ring-2 ${accentBorder} transition text-gray-900 placeholder:text-gray-300`} />
                   </div>
                 </div>
@@ -216,7 +215,7 @@ export default function B2BLoginPage() {
               {mode === 'register' && (
                 <>
                   <div>
-                    <label className="text-xs font-medium text-gray-500 block mb-1.5">Email · 邮箱 <span className="text-gray-500">(推荐)</span></label>
+                    <label className="text-xs font-medium text-gray-500 block mb-1.5">Email · 邮箱 <span className="text-gray-500">(consigliata · 推荐)</span></label>
                     <div className="relative">
                       <Mail className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-300" strokeWidth={1.75} />
                       <input value={email} onChange={e => setEmail(e.target.value)} type="email"
@@ -225,7 +224,7 @@ export default function B2BLoginPage() {
                     </div>
                   </div>
                   <div>
-                    <label className="text-xs font-medium text-gray-500 block mb-1.5">Telefono · 手机号 <span className="text-gray-500">(选填)</span></label>
+                    <label className="text-xs font-medium text-gray-500 block mb-1.5">Telefono · 手机号 <span className="text-orange-500">*</span></label>
                     <div className="relative">
                       <Phone className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-300" strokeWidth={1.75} />
                       <input value={phone} onChange={e => setPhone(e.target.value)} type="tel"
@@ -241,7 +240,7 @@ export default function B2BLoginPage() {
                 <div className="relative">
                   <Lock className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-300" strokeWidth={1.75} />
                   <input value={password} onChange={e => setPassword(e.target.value)} type="password"
-                    placeholder={mode === 'register' ? '至少6位' : '请输入密码'}
+                    placeholder={mode === 'register' ? 'Min. 6 caratteri · 至少6位' : 'Password · 请输入密码'}
                     onKeyDown={e => e.key === 'Enter' && mode === 'login' && handleLogin()}
                     className={`w-full border border-gray-200 rounded-xl pl-10 pr-4 py-3 text-sm outline-none focus:ring-2 ${accentBorder} transition text-gray-900 placeholder:text-gray-300`} />
                 </div>
@@ -249,17 +248,17 @@ export default function B2BLoginPage() {
 
               {mode === 'register' && (
                 <div className="bg-gray-50 rounded-xl p-4 space-y-3 border border-gray-100">
-                  <div className="text-xs text-gray-500 font-medium">向批发商索取的商家号 + 临时密码</div>
+                  <div className="text-xs text-gray-500 font-medium">Codice negozio + password temporanea (dal fornitore) · 向批发商索取的商家号 + 临时密码</div>
                   <div className="relative">
                     <KeyRound className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-300" strokeWidth={1.75} />
                     <input value={inviteCode} onChange={e => setInviteCode(e.target.value)}
-                      placeholder="商家号，如 M123456"
+                      placeholder="Codice negozio · 商家号 (es. M123456)"
                       className={`w-full border border-gray-200 rounded-xl pl-10 pr-4 py-2.5 text-sm outline-none focus:ring-2 ${accentBorder} bg-white transition`} />
                   </div>
                   <div className="relative">
                     <Lock className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-300" strokeWidth={1.75} />
                     <input value={inviteTempPwd} onChange={e => setInviteTempPwd(e.target.value)}
-                      placeholder="临时密码"
+                      placeholder="Password temporanea · 临时密码"
                       className={`w-full border border-gray-200 rounded-xl pl-10 pr-4 py-2.5 text-sm outline-none focus:ring-2 ${accentBorder} bg-white transition`} />
                   </div>
                 </div>
