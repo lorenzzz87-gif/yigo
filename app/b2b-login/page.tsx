@@ -75,7 +75,7 @@ export default function B2BLoginPage() {
       {/* ── Left panel: brand ── */}
       <div className={`hidden lg:flex w-[520px] shrink-0 flex-col justify-between p-12 ${isBuyer ? 'bg-[#0f172a]' : 'bg-[#1c1008]'}`}>
         <div>
-          <img src="/logo.svg" alt="Yigo" className="h-12 w-auto mb-16 brightness-0 invert" />
+          <img src="/logo-white.svg" alt="Yigo" className="h-12 w-auto mb-16" />
 
           <div className="mb-10">
             <div className={`text-xs font-semibold tracking-widest uppercase mb-4 ${isBuyer ? 'text-orange-400' : 'text-amber-400'}`}>
@@ -86,7 +86,12 @@ export default function B2BLoginPage() {
                 ? <>Gestisci il tuo<br />business con Yigo</>
                 : <>Ordina con facilità<br />dai tuoi fornitori</>}
             </h1>
-            <p className="text-gray-400 text-base leading-relaxed">
+            <p className="text-gray-300 text-base leading-relaxed">
+              {roleHint === 'wholesaler'
+                ? <>Carica prodotti, gestisci ordini e invita clienti,<br />tutto in un unico posto.</>
+                : <>Sfoglia il catalogo, ordina e monitora<br />i tuoi ordini in tempo reale.</>}
+            </p>
+            <p className="text-gray-400 text-sm leading-relaxed mt-1.5">
               {roleHint === 'wholesaler'
                 ? '上架商品、管理订单、邀请客户，一站式批发管理平台。'
                 : '浏览批发商商品目录，一键下单，实时跟踪订单状态。'}
@@ -96,19 +101,22 @@ export default function B2BLoginPage() {
           {/* Feature list */}
           <div className="space-y-4">
             {(roleHint === 'wholesaler' ? [
-              '商品目录管理与批量导入',
-              '客户邀请码系统',
-              '订单跟踪与 Excel 导出',
+              ['Catalogo e importazione in blocco', '商品目录管理与批量导入'],
+              ['Sistema di codici invito clienti', '客户邀请码系统'],
+              ['Tracciamento ordini ed export Excel', '订单跟踪与 Excel 导出'],
             ] : [
-              '实时浏览批发商完整目录',
-              '快速下单，业务员审核',
-              '订单历史随时查询',
-            ]).map((f, i) => (
-              <div key={i} className="flex items-center gap-3">
-                <div className={`w-5 h-5 rounded-full flex items-center justify-center shrink-0 ${isBuyer ? 'bg-orange-500/20' : 'bg-amber-500/20'}`}>
+              ['Catalogo completo dei fornitori in tempo reale', '实时浏览批发商完整目录'],
+              ['Ordini rapidi con verifica dell’agente', '快速下单，业务员审核'],
+              ['Storico ordini sempre consultabile', '订单历史随时查询'],
+            ]).map(([it, zh], i) => (
+              <div key={i} className="flex items-start gap-3">
+                <div className={`w-5 h-5 rounded-full flex items-center justify-center shrink-0 mt-0.5 ${isBuyer ? 'bg-orange-500/20' : 'bg-amber-500/20'}`}>
                   <CheckCircle2 className={`w-3.5 h-3.5 ${isBuyer ? 'text-orange-400' : 'text-amber-400'}`} strokeWidth={2} />
                 </div>
-                <span className="text-gray-500 text-sm">{f}</span>
+                <div>
+                  <div className="text-gray-200 text-sm">{it}</div>
+                  <div className="text-gray-500 text-xs mt-0.5">{zh}</div>
+                </div>
               </div>
             ))}
           </div>

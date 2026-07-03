@@ -2,6 +2,6 @@
   <circle cx="40" cy="40" r="38" fill="none" stroke="#F97316" stroke-width="2.5"/>
   <circle cx="40" cy="40" r="30" fill="#F97316"/>
   <text x="40" y="48" font-family="Georgia,serif" font-size="24" font-weight="700" fill="white" text-anchor="middle" letter-spacing="-1">Yigo</text>
-  <text x="98" y="34" font-family="Georgia,serif" font-size="26" font-weight="700" fill="#0F172A">Yigo</text>
+  <text x="98" y="34" font-family="Georgia,serif" font-size="26" font-weight="700" fill="#ffffff">Yigo</text>
   <text x="100" y="54" font-family="-apple-system,BlinkMacSystemFont,sans-serif" font-size="12" fill="#F97316" letter-spacing="0.5">易购 · B2B平台</text>
 </svg>
