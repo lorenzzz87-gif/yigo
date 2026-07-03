@@ -619,7 +619,7 @@ export default function B2BPage() {
                   <div>
                     <label className="text-sm text-gray-500 block mb-1">{t.note}</label>
                     <textarea value={remark} onChange={e => setRemark(e.target.value)} placeholder={t.notePh} rows={2}
-                      className="w-full border border-gray-200 rounded-lg p-2.5 text-sm outline-none focus:border-orange-400 resize-none" />
+                      className="w-full border border-gray-200 rounded-lg p-2.5 text-sm text-gray-800 placeholder:text-gray-400 outline-none focus:border-orange-400 resize-none" />
                   </div>
                 </div>
 
