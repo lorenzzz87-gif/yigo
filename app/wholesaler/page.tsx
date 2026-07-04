@@ -16,8 +16,10 @@ import {
   X,
   CheckCircle2,
   GripVertical,
+  Eye,
+  Printer,
 } from 'lucide-react'
-import { store, User, Product, Order, Category, Invite, getStatusLabel } from '@/lib/store'
+import { store, User, Product, Order, Category, Invite, BuyerProfile, getStatusLabel } from '@/lib/store'
 import { exportAllOrders, exportSingleOrder } from '@/lib/excel'
 import BulkImport from './BulkImport'
 import Navbar from '@/components/navbar'
@@ -59,6 +61,9 @@ export default function WholesalerPage() {
   const [toast, setToast] = useState('')
   const [logoUrl, setLogoUrl] = useState<string | null>(null)
   const [uploadingLogo, setUploadingLogo] = useState(false)
+  const [previewOrder, setPreviewOrder] = useState<Order | null>(null)
+  const [previewProfile, setPreviewProfile] = useState<BuyerProfile | null>(null)
+  const [previewLoading, setPreviewLoading] = useState(false)
 
   useEffect(() => {
     const u = store.getCurrentUser()
@@ -171,6 +176,14 @@ export default function WholesalerPage() {
 
   async function updateOrderStatus(id: string, status: Order['status']) {
     await store.updateOrderStatus(id, status); refreshData(wid)
+  }
+
+  async function openPreview(order: Order) {
+    setPreviewOrder(order)
+    setPreviewProfile(null)
+    setPreviewLoading(true)
+    try { setPreviewProfile(await store.getBuyerProfile(order.buyerId)) } catch { /* no profile */ }
+    setPreviewLoading(false)
   }
 
   async function addCategory() {
@@ -350,6 +363,10 @@ export default function WholesalerPage() {
                       {statusActions[order.status].map(a => (
                         <button key={a.next} onClick={() => updateOrderStatus(order.id, a.next)} className="text-xs px-3 py-1 bg-orange-500 text-white rounded-lg hover:bg-orange-600">{a.label}</button>
                       ))}
+                      <button onClick={() => openPreview(order)}
+                        className="flex items-center gap-1 text-xs px-3 py-1 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200">
+                        <Eye className="w-3.5 h-3.5" strokeWidth={1.75} /> 预览
+                      </button>
                       <button onClick={() => handleExportSingle(order)} disabled={exporting}
                         className="text-xs px-3 py-1 bg-blue-500 text-white rounded-lg hover:bg-blue-600 disabled:opacity-60">
                         导出此单
@@ -694,6 +711,105 @@ export default function WholesalerPage() {
                 </div>
               </>
             })()}
+          </div>
+        </div>
+      )}
+
+      {/* 订单预览 + 打印/PDF */}
+      {previewOrder && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4 no-print" onClick={() => setPreviewOrder(null)}>
+          <div className="bg-white rounded-2xl w-full max-w-2xl max-h-[92vh] flex flex-col overflow-hidden" onClick={e => e.stopPropagation()}>
+            {/* 顶部操作栏（不打印） */}
+            <div className="flex items-center justify-between px-5 py-3 border-b border-gray-100 shrink-0 no-print">
+              <h3 className="font-bold text-gray-800">订单预览</h3>
+              <div className="flex items-center gap-2">
+                <button onClick={() => window.print()}
+                  className="flex items-center gap-1.5 px-4 py-2 bg-orange-500 text-white text-sm rounded-lg hover:bg-orange-600">
+                  <Printer className="w-4 h-4" strokeWidth={1.75} /> 打印 / PDF
+                </button>
+                <button onClick={() => setPreviewOrder(null)} className="w-8 h-8 rounded-full hover:bg-gray-100 flex items-center justify-center text-gray-500"><X className="w-4 h-4" strokeWidth={2} /></button>
+              </div>
+            </div>
+
+            {/* 可打印区域 */}
+            <div className="print-area overflow-y-auto p-6 text-gray-800">
+              {/* 抬头 */}
+              <div className="flex items-start justify-between pb-4 border-b border-gray-200">
+                <div className="flex items-center gap-3">
+                  {logoUrl ? <img src={logoUrl} alt="" className="h-10 w-auto max-w-[120px] object-contain" /> : <span className="font-bold text-lg">{user.name}</span>}
+                </div>
+                <div className="text-right">
+                  <div className="text-lg font-bold">{previewOrder.orderNo}</div>
+                  <div className="text-xs text-gray-500">{new Date(previewOrder.createdAt).toLocaleString('it-IT')}</div>
+                  <div className="text-xs mt-1">{previewOrder.status === 'pending_review' ? '新订单 · 待接单' : getStatusLabel(previewOrder.status)}</div>
+                </div>
+              </div>
+
+              {/* 客户信息 */}
+              <div className="py-4 border-b border-gray-200">
+                <div className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Cliente · 客户信息</div>
+                {previewLoading ? (
+                  <div className="text-sm text-gray-400">加载中…</div>
+                ) : (
+                  <div className="grid grid-cols-2 gap-x-6 gap-y-1 text-sm">
+                    {[
+                      ['Ragione Sociale · 公司', previewProfile?.ragioneSociale || previewOrder.buyerName],
+                      ['P.IVA', previewProfile?.piva],
+                      ['Codice Fiscale · 税号', previewProfile?.codiceFiscale],
+                      ['Telefono · 电话', previewProfile?.telefono],
+                      ['Email', previewProfile?.emailOrdini],
+                      ['Codice SDI', previewProfile?.codiceSdi],
+                      ['PEC', previewProfile?.pec],
+                      ['Indirizzo · 开票地址', [previewProfile?.indirizzoFattura, previewProfile?.capFattura, previewProfile?.cittaFattura, previewProfile?.provinciaFattura].filter(Boolean).join(' ')],
+                      ['Spedizione · 收货地址', [previewProfile?.indirizzoSpedizione, previewProfile?.capSpedizione, previewProfile?.cittaSpedizione].filter(Boolean).join(' ')],
+                      ['Note consegna · 收货备注', previewProfile?.noteConsegna],
+                    ].filter(([, v]) => (v || '').toString().trim()).map(([label, value], i) => (
+                      <div key={i} className="flex gap-2">
+                        <span className="text-gray-500 shrink-0">{label}:</span>
+                        <span className="font-medium break-all">{value}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {/* 订单明细 */}
+              <div className="py-4">
+                <div className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Dettaglio ordine · 订单明细</div>
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b border-gray-200 text-gray-500 text-xs">
+                      <th className="text-left font-medium py-1.5">Prodotto · 商品</th>
+                      <th className="text-center font-medium py-1.5 w-16">Q.tà · 数量</th>
+                      <th className="text-right font-medium py-1.5 w-20">Prezzo · 单价</th>
+                      <th className="text-right font-medium py-1.5 w-24">Subtot.</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {previewOrder.items.map((it, i) => (
+                      <tr key={i} className="border-b border-gray-100">
+                        <td className="py-2">{it.productName}</td>
+                        <td className="text-center py-2">{it.quantity} {it.unit}</td>
+                        <td className="text-right py-2">€{it.price.toFixed(2)}</td>
+                        <td className="text-right py-2 font-medium">€{(it.price * it.quantity).toFixed(2)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+                <div className="flex justify-end mt-3">
+                  <div className="flex items-center gap-6">
+                    <span className="text-sm text-gray-500">Totale · 合计</span>
+                    <span className="text-xl font-bold text-orange-600">€{previewOrder.totalAmount.toFixed(2)}</span>
+                  </div>
+                </div>
+              </div>
+
+              {previewOrder.remark && (
+                <div className="pt-3 border-t border-gray-200 text-sm">
+                  <span className="text-gray-500">Note · 备注：</span>{previewOrder.remark}
+                </div>
+              )}
+            </div>
           </div>
         </div>
       )}
