@@ -44,6 +44,7 @@ function toast(msg, type = 'info') {
   const t = document.createElement('div');
   t.className = 'toast t-' + type;
   t.textContent = msg;
+  if (typeof translateDOM === 'function') translateDOM(t);
   box.appendChild(t);
   const life = type === 'error' ? 5200 : 3200;
   setTimeout(() => { t.style.opacity = '0'; t.style.transition = 'opacity .25s'; }, life - 260);
@@ -78,6 +79,7 @@ function openModal({ title, body, footer = '', wide = false, onClose = null }) {
   overlay.querySelector('[data-close]').addEventListener('click', close);
   document.addEventListener('keydown', onKey);
   root.appendChild(overlay);
+  if (typeof translateDOM === 'function') translateDOM(overlay);
   const first = overlay.querySelector('input, select, textarea, button:not(.modal-x)');
   if (first) setTimeout(() => first.focus(), 30);
   return { overlay, body: bodyEl, close };

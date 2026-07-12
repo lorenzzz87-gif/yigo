@@ -51,13 +51,13 @@ function handlePackScan(code) {
 function handlePackWaybill(code) {
   const o = orderByCode(code);
   if (!o) {
-    packEvt('err', `未找到该单号：${code}（订单可能未导入）`);
+    packEvt('err', t('未找到该单号：{code}（订单可能未导入）', {code}));
     packLog(code, 'unknown');
     playBeep('err');
     return;
   }
   if (o.status === 'verified') {
-    packEvt('warn', `该单已于 ${fmtDT(o.verifiedAt)} 出库，请勿重复发货！`);
+    packEvt('warn', t('该单已于 {time} 出库，请勿重复发货！', {time: fmtDT(o.verifiedAt)}));
     packLog(code, 'dupw', o.id);
     playBeep('dup');
     return;
@@ -68,7 +68,7 @@ function handlePackWaybill(code) {
   if (!req.length || (total <= 1 && DB.settings.packSingleFast !== false)) {
     attachParcel(o);
     verifyOrder(o);
-    packEvt('ok', `单件订单，已直接完成出库：${o.trackingNo || o.orderNo}`);
+    packEvt('ok', t('单件订单，已直接完成出库：{no}', {no: o.trackingNo || o.orderNo}));
     packLog(code, 'fast', o.id);
     playBeep('ok');
     return;
@@ -79,10 +79,10 @@ function handlePackWaybill(code) {
     save();
   }
   packState.currentOrderId = o.id;
-  const t = packTotals(o);
+  const tot = packTotals(o);
   packEvt('info', resume
-    ? `继续打包（此前已装 ${t.done}/${t.total} 件），请扫商品条码`
-    : `开始打包，共 ${t.total} 件，请逐件扫商品条码装箱`);
+    ? t('继续打包（此前已装 {done}/{total} 件），请扫商品条码', {done: tot.done, total: tot.total})
+    : t('开始打包，共 {total} 件，请逐件扫商品条码装箱', {total: tot.total}));
   playBeep('tick');
 }
 
@@ -91,7 +91,7 @@ function handlePackItem(cur, code) {
   const c = normCode(code);
   // 重复扫了当前面单
   if (c === normCode(cur.trackingNo) || c === normCode(cur.orderNo)) {
-    packEvt('info', '当前包裹正在打包中，请扫商品条码');
+    packEvt('info', t('当前包裹正在打包中，请扫商品条码'));
     playBeep('tick');
     return;
   }
@@ -109,7 +109,7 @@ function handlePackItem(cur, code) {
   if (line) {
     const done = packedCount(cur, line.key);
     if (done >= line.qty) {
-      packEvt('warn', `【${line.name}】已装满 ${line.qty} 件，请勿多装！`);
+      packEvt('warn', t('【{name}】已装满 {qty} 件，请勿多装！', {name: line.name, qty: line.qty}));
       playBeep('dup');
       return;
     }
@@ -119,13 +119,13 @@ function handlePackItem(cur, code) {
       completePack(cur, false);
     } else {
       save();
-      packEvt('ok', `已装 ${line.name}（${done + 1}/${line.qty}）`);
+      packEvt('ok', t('已装 {name}（{n}/{qty}）', {name: line.name, n: done + 1, qty: line.qty}));
       playBeep('tick');
     }
     return;
   }
   if (known) {
-    packEvt('err', `装错了！【${known.name}】不在本单，请取出`);
+    packEvt('err', t('装错了！【{name}】不在本单，请取出', {name: known.name}));
     packLog(code, 'wrong', cur.id);
     playBeep('err');
     return;
@@ -133,11 +133,11 @@ function handlePackItem(cur, code) {
   // 是不是误扫了另一张面单？
   const other = orderByCode(code);
   if (other) {
-    packEvt('warn', '这是另一张面单。请先完成或暂停当前包裹，再扫新面单');
+    packEvt('warn', t('这是另一张面单。请先完成或暂停当前包裹，再扫新面单'));
     playBeep('err');
     return;
   }
-  packEvt('err', `未知条码：${code}（不在本单，也不在商品库）`);
+  packEvt('err', t('未知条码：{code}（不在本单，也不在商品库）', {code}));
   packLog(code, 'unknown', cur.id);
   playBeep('err');
 }
@@ -147,7 +147,7 @@ function completePack(o, forced) {
   verifyOrder(o); // 内部会清除 packing 并扣库存
   packState.currentOrderId = null;
   packLog(o.trackingNo || o.orderNo || '', forced ? 'force' : 'done', o.id);
-  packEvt('ok', `打包完成，已出库：${o.trackingNo || o.orderNo}${forced ? '（缺件强制完成）' : ''}`);
+  packEvt('ok', t(forced ? '打包完成，已出库：{no}（缺件强制完成）' : '打包完成，已出库：{no}', {no: o.trackingNo || o.orderNo}));
   playBeep('ok');
 }
 
@@ -170,10 +170,10 @@ function exportPackXLSX() {
       name: '待打包',
       rows: [['创建时间', '渠道', '订单号', '运单号', '收件人', '商品明细', '件数', '打包进度', '备注'],
         ...pending.map(o => {
-          const t = packTotals(o);
+          const tot = packTotals(o);
           return [fmtFull(o.createdAt), o.channel || '', o.orderNo || '', o.trackingNo || '',
-            o.receiver || '', orderItemsSummary(o), t.total,
-            o.packing ? `打包中 ${t.done}/${t.total}` : (t.total <= 1 ? '单件直发' : '待打包'), o.note || ''];
+            o.receiver || '', orderItemsSummary(o), tot.total,
+            o.packing ? `打包中 ${tot.done}/${tot.total}` : (tot.total <= 1 ? '单件直发' : '待打包'), o.note || ''];
         })]
     }
   ]);
@@ -189,13 +189,13 @@ function packEventHTML() {
 
 function packChecklistHTML(o) {
   const req = packRequired(o);
-  const t = packTotals(o);
+  const tot = packTotals(o);
   return `
     <div class="pk-head">
       ${channelBadge(o.channel)}
       <span class="pk-track">${esc(o.trackingNo || o.orderNo || '')}</span>
-      ${o.receiver ? `<span class="dim small">收件 ${esc(o.receiver)}</span>` : ''}
-      ${o.note ? `<span class="muted small">备注：${esc(o.note)}</span>` : ''}
+      ${o.receiver ? `<span class="dim small"><span>收件</span> ${esc(o.receiver)}</span>` : ''}
+      ${o.note ? `<span class="muted small"><span>备注：</span>${esc(o.note)}</span>` : ''}
     </div>
     <div class="pk-list">
       ${req.map(l => {
@@ -215,8 +215,8 @@ function packChecklistHTML(o) {
       }).join('')}
     </div>
     <div class="pk-total">
-      <b>${t.done} / ${t.total} 件</b>
-      <div class="pk-bar"><i style="width:${t.total ? Math.min(100, t.done / t.total * 100) : 0}%"></i></div>
+      <b>${tot.done} / ${tot.total} 件</b>
+      <div class="pk-bar"><i style="width:${tot.total ? Math.min(100, tot.done / tot.total * 100) : 0}%"></i></div>
     </div>
     <div class="flex" style="flex-wrap:wrap">
       <button class="btn btn-accent" data-pk-finish>${icon('check', 15)}完成打包出库</button>
@@ -281,14 +281,14 @@ function renderPack(el) {
           ${queue.length ? `<div class="tbl-wrap"><table class="tbl"><thead>
             <tr><th>渠道</th><th>运单号</th><th>商品</th><th class="num">件数</th><th>进度</th></tr></thead><tbody>
             ${queue.slice(0, 8).map(o => {
-              const t = packTotals(o);
+              const tot = packTotals(o);
               return `<tr data-pk-open="${o.id}" style="cursor:pointer" title="点击开始/继续打包">
                 <td>${channelBadge(o.channel)}</td>
                 <td class="mono">${esc(o.trackingNo || o.orderNo || '')}</td>
                 <td class="ellip">${esc(orderItemsSummary(o))}</td>
-                <td class="num">${t.total}</td>
-                <td>${o.packing ? `<span class="badge b-blue">打包中 ${t.done}/${t.total}</span>`
-                  : t.total <= 1 ? '<span class="badge b-gray">单件直发</span>'
+                <td class="num">${tot.total}</td>
+                <td>${o.packing ? `<span class="badge b-blue">打包中 ${tot.done}/${tot.total}</span>`
+                  : tot.total <= 1 ? '<span class="badge b-gray">单件直发</span>'
                   : '<span class="badge b-amber">待打包</span>'}</td></tr>`;
             }).join('')}
           </tbody></table></div>
@@ -345,7 +345,7 @@ function renderPack(el) {
     o.packing.packed[key] = done + 1;
     o.packing.updatedAt = Date.now();
     if (packIsComplete(o)) completePack(o, false);
-    else { save(); packEvt('ok', `已装 ${line.name}（${done + 1}/${line.qty}）`); playBeep('tick'); }
+    else { save(); packEvt('ok', t('已装 {name}（{n}/{qty}）', {name: line.name, n: done + 1, qty: line.qty})); playBeep('tick'); }
     render(); focusPack();
   }));
   el.querySelectorAll('[data-pk-minus]').forEach(b => b.addEventListener('click', () => {
@@ -357,7 +357,7 @@ function renderPack(el) {
       o.packing.packed[key] = done - 1;
       o.packing.updatedAt = Date.now();
       save();
-      packEvt('info', '已回退 1 件');
+      packEvt('info', t('已回退 1 件'));
     }
     render(); focusPack();
   }));
@@ -378,7 +378,7 @@ function renderPack(el) {
   });
   el.querySelector('[data-pk-pause]')?.addEventListener('click', () => {
     packState.currentOrderId = null;
-    packEvt('info', '已暂停，进度已保存（云同步后其他设备可继续）');
+    packEvt('info', t('已暂停，进度已保存（云同步后其他设备可继续）'));
     render(); focusPack();
   });
   el.querySelector('[data-pk-reset]')?.addEventListener('click', async () => {
@@ -389,7 +389,7 @@ function renderPack(el) {
       delete o.packing;
       save();
       packState.currentOrderId = null;
-      packEvt('info', '已清除进度');
+      packEvt('info', t('已清除进度'));
       render();
     }
     focusPack();

@@ -617,9 +617,9 @@ function renderOrders(el) {
               ${p ? `<span class="muted">（当前库存 ${Number(p.stock)}）</span>`
                   : `<span class="badge b-red" style="margin-left:6px">未匹配商品库</span>`}</div>`;
           }).join('')}</div>` : '<span class="muted small">无商品明细</span>'}
-        ${o.receiver ? `<div class="small muted mt-8">收件人：${esc(o.receiver)}</div>` : ''}
-        ${o.parcel ? `<div class="small muted">包裹：${[o.parcel.l, o.parcel.w, o.parcel.h].map(v => v === '' || v == null ? '?' : v).join('×')} cm${o.parcel.kg !== '' && o.parcel.kg != null ? ` · ${o.parcel.kg} kg` : ''}</div>` : ''}
-        ${o.note ? `<div class="small muted">备注：${esc(o.note)}</div>` : ''}
+        ${o.receiver ? `<div class="small muted mt-8"><span>收件人：</span>${esc(o.receiver)}</div>` : ''}
+        ${o.parcel ? `<div class="small muted"><span>包裹：</span>${[o.parcel.l, o.parcel.w, o.parcel.h].map(v => v === '' || v == null ? '?' : v).join('×')} cm${o.parcel.kg !== '' && o.parcel.kg != null ? ` · ${o.parcel.kg} kg` : ''}</div>` : ''}
+        ${o.note ? `<div class="small muted"><span>备注：</span>${esc(o.note)}</div>` : ''}
       </td></tr>`).join('')}
     </tbody></table></div>
     ${list.length > 300 ? `<p class="small muted mt-8">仅显示前 300 条（共 ${list.length} 条），可用搜索缩小范围</p>` : ''}`
@@ -975,8 +975,7 @@ function renderSettings(el) {
     </div>
     <div class="card">
       <div class="card-title">${icon('save', 16)}数据备份</div>
-      <p class="small dim mb-14">所有数据仅保存在本机浏览器（localStorage）。清除浏览器数据会导致丢失，<b>请定期导出备份</b>。
-        上次备份：${DB.settings.lastBackup ? fmtFull(DB.settings.lastBackup) : '<span class="neg">从未备份</span>'}</p>
+      <p class="small dim mb-14">所有数据仅保存在本机浏览器（localStorage）。清除浏览器数据会导致丢失，<b>请定期导出备份</b>。<span>上次备份：</span>${DB.settings.lastBackup ? fmtFull(DB.settings.lastBackup) : '<span class="neg">从未备份</span>'}</p>
       <div class="flex" style="flex-wrap:wrap">
         <button class="btn btn-primary" data-backup>${icon('download', 15)}导出备份（JSON）</button>
         <button class="btn" data-restore-btn>${icon('upload', 15)}导入备份恢复</button>

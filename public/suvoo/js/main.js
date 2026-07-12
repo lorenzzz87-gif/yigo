@@ -48,6 +48,11 @@ function render() {
   page.innerHTML = '';
   route.render(page);
   drawBackupHint();
+  // 静态文案先还原为中文源，再统一翻译（避免二次切换语言时键失配）
+  const brandSub = document.querySelector('.brand-text span');
+  if (brandSub) brandSub.textContent = '进销存 · 面单核对';
+  if (typeof updateSyncUI === 'function') updateSyncUI();
+  if (typeof translateDOM === 'function') translateDOM(document.querySelector('.app'));
   window.scrollTo(0, 0);
 }
 

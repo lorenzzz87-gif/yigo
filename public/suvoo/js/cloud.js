@@ -257,6 +257,10 @@ function updateSyncUI() {
   }
   const badge = document.querySelector('[data-cloud-state]');
   if (badge) badge.textContent = syncStatusText();
+  if (typeof translateDOM === 'function') {
+    translateDOM(el); translateDOM(document.getElementById('storageNote'));
+    if (badge) translateDOM(badge);
+  }
 }
 
 /* ---------- 启动 ---------- */
