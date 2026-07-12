@@ -967,6 +967,10 @@ function renderSettings(el) {
         <div class="sl-txt"><b>核对时自动扣减库存</b><span>扫描核对订单时按商品明细自动出库；撤销核对自动回补</span></div>
         <label class="checkbox-line"><input type="checkbox" data-set="deduct" ${DB.settings.deduct ? 'checked' : ''}>开启</label>
       </div>
+      <div class="setting-line">
+        <div class="sl-txt"><b>单件订单扫面单直发</b><span>扫码打包页：只有 1 件商品的订单扫面单直接出库，无需再扫商品</span></div>
+        <label class="checkbox-line"><input type="checkbox" data-set="packSingleFast" ${DB.settings.packSingleFast !== false ? 'checked' : ''}>开启</label>
+      </div>
     </div>
     <div class="card">
       <div class="card-title">${icon('save', 16)}数据备份</div>

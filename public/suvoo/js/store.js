@@ -12,7 +12,7 @@ function defaultDB() {
                     //  items:[{sku,name,qty}], status:'pending'|'verified', createdAt, verifiedAt}
     moves: [],      // {id, at, type:'in'|'out'|'adjust', sku, name, qty(signed), reason, ref, note}
     channels: ['淘宝', '拼多多', '抖音', '微信', 'Shopify', '其他'],
-    settings: { beep: true, deduct: true, lastBackup: null }
+    settings: { beep: true, deduct: true, packSingleFast: true, lastBackup: null }
   };
 }
 
@@ -130,6 +130,7 @@ function verifyOrder(o) {
   if (!o || o.status === 'verified') return false;
   o.status = 'verified';
   o.verifiedAt = Date.now();
+  delete o.packing; // 打包进度随出库清除
   if (DB.settings.deduct) {
     for (const it of (o.items || [])) {
       const p = productByCode(it.sku);
@@ -155,6 +156,36 @@ function unverifyOrder(o) {
   }
   save();
   return true;
+}
+
+/* ---------- 打包进度（存于订单 packing 字段，随订单行级同步上云） ---------- */
+function packKey(it) { return normCode(it.sku || it.name); }
+// 应装清单：按 SKU 聚合订单明细 → [{key, sku, name, qty}]
+function packRequired(o) {
+  const map = new Map();
+  for (const it of (o.items || [])) {
+    const k = packKey(it);
+    if (!k) continue;
+    const cur = map.get(k) || { key: k, sku: it.sku || '', name: it.name || it.sku || '', qty: 0 };
+    cur.qty += Number(it.qty) || 0;
+    map.set(k, cur);
+  }
+  return [...map.values()];
+}
+function packedCount(o, key) {
+  return (o.packing && o.packing.packed && o.packing.packed[key]) || 0;
+}
+function packTotals(o) {
+  let total = 0, done = 0;
+  for (const l of packRequired(o)) {
+    total += l.qty;
+    done += Math.min(packedCount(o, l.key), l.qty);
+  }
+  return { total, done };
+}
+function packIsComplete(o) {
+  const req = packRequired(o);
+  return req.length > 0 && req.every(l => packedCount(o, l.key) >= l.qty);
 }
 
 function orderItemsSummary(o) {

@@ -31,7 +31,8 @@ const ICONS = {
   info: '<circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/>',
   chevron: '<path d="M6 9l6 6 6-6"/>',
   adjust: '<path d="M4 21v-7"/><path d="M4 10V3"/><path d="M12 21v-9"/><path d="M12 8V3"/><path d="M20 21v-5"/><path d="M20 12V3"/><path d="M2 14h4"/><path d="M10 8h4"/><path d="M18 16h4"/>',
-  box: '<path d="M21 8l-9-5-9 5v8l9 5 9-5V8z"/><path d="M3 8l9 5 9-5"/><path d="M12 13v9"/>'
+  box: '<path d="M21 8l-9-5-9 5v8l9 5 9-5V8z"/><path d="M3 8l9 5 9-5"/><path d="M12 13v9"/>',
+  pack: '<path d="m16 16 2 2 4-4"/><path d="M21 10V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l2-1.14"/><path d="m7.5 4.27 9 5.15"/><path d="M3.29 7 12 12l8.71-5"/><path d="M12 22V12"/>'
 };
 function icon(name, size = 18) {
   return `<svg viewBox="0 0 24 24" width="${size}" height="${size}" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${ICONS[name] || ''}</svg>`;
@@ -99,9 +100,12 @@ function confirmBox(msg, { danger = false, okText = '确定' } = {}) {
 
 /* ---------- 徽章 ---------- */
 function statusBadge(o) {
-  return o.status === 'verified'
-    ? `<span class="badge b-green">${icon('check', 12)}已核对</span>`
-    : `<span class="badge b-amber">待核对</span>`;
+  if (o.status === 'verified') return `<span class="badge b-green">${icon('check', 12)}已核对</span>`;
+  if (o.packing && typeof packTotals === 'function') {
+    const t = packTotals(o);
+    return `<span class="badge b-blue">${icon('pack', 12)}打包中 ${t.done}/${t.total}</span>`;
+  }
+  return `<span class="badge b-amber">待核对</span>`;
 }
 const CHAN_COLORS = ['#059669', '#2563EB', '#D97706', '#DB2777', '#7C3AED', '#0891B2', '#65A30D', '#DC2626'];
 function chanColor(name) {

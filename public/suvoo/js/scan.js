@@ -9,7 +9,10 @@ function playBeep(kind) {
   try {
     _actx = _actx || new (window.AudioContext || window.webkitAudioContext)();
     if (_actx.state === 'suspended') _actx.resume();
-    const seq = kind === 'ok' ? [[1175, 90]] : kind === 'dup' ? [[660, 90], [660, 90]] : [[220, 340]];
+    const seq = kind === 'ok' ? [[1175, 90]]
+      : kind === 'tick' ? [[1568, 50]]
+      : kind === 'dup' ? [[660, 90], [660, 90]]
+      : [[220, 340]];
     let t = _actx.currentTime + 0.01;
     for (const [f, d] of seq) {
       const o = _actx.createOscillator(), g = _actx.createGain();
