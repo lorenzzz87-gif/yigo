@@ -12,6 +12,15 @@ const nextConfig: NextConfig = {
           source: '/pocketmoda/:path((?!.*\\..+$).*)',
           destination: '/pocketmoda/index.html',
         },
+        // SUVOO 进销存 · 面单核对（静态应用，位于 public/suvoo）
+        {
+          source: '/suvoo',
+          destination: '/suvoo/index.html',
+        },
+        {
+          source: '/suvoo/:path((?!.*\\..+$).*)',
+          destination: '/suvoo/index.html',
+        },
       ],
     }
   },
