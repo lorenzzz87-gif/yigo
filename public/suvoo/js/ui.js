@@ -181,6 +181,43 @@ function attachProductPicker(input, onPick) {
   });
 }
 
+/* ---------- Excel 导出（SheetJS 按需加载） ---------- */
+let _xlsxLoading = null;
+function loadXLSX() {
+  if (window.XLSX) return Promise.resolve();
+  if (_xlsxLoading) return _xlsxLoading;
+  _xlsxLoading = new Promise((res, rej) => {
+    const s = document.createElement('script');
+    s.src = 'https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js';
+    s.onload = res;
+    s.onerror = () => { _xlsxLoading = null; rej(new Error('Excel 组件加载失败')); };
+    document.head.appendChild(s);
+  });
+  return _xlsxLoading;
+}
+// sheets: [{name, rows:[[...],...]}] → 下载 .xlsx；组件加载失败时退回 CSV
+async function exportXLSX(filename, sheets) {
+  try {
+    await loadXLSX();
+    const wb = XLSX.utils.book_new();
+    for (const sh of sheets) {
+      const ws = XLSX.utils.aoa_to_sheet(sh.rows);
+      ws['!cols'] = (sh.rows[0] || []).map((_, i) => ({
+        wch: Math.min(42, Math.max(9, ...sh.rows.slice(0, 60).map(r => String(r[i] ?? '').length * 1.8)))
+      }));
+      XLSX.utils.book_append_sheet(wb, ws, sh.name);
+    }
+    XLSX.writeFile(wb, filename);
+    toast(`已导出 ${filename}`, 'success');
+  } catch (e) {
+    console.error(e);
+    for (const sh of sheets) {
+      downloadFile(filename.replace(/\.xlsx$/, '') + '_' + sh.name + '.csv', toCSV(sh.rows));
+    }
+    toast('Excel 组件加载失败（离线？），已改为导出 CSV', 'warn');
+  }
+}
+
 /* ---------- 空状态 ---------- */
 function emptyHTML(text, actionsHTML = '') {
   return `<div class="empty">${icon('box', 40)}<p>${esc(text)}</p>${actionsHTML}</div>`;

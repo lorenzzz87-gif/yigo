@@ -287,6 +287,9 @@ table.tbl { width: 100%; border-collapse: collapse; font-size: 13.5px; }
 .pk-event.warn { background: var(--warn-weak); color: #B45309; border-color: #FDE68A; }
 .pk-event.err  { background: var(--danger-weak); color: #B91C1C; border-color: #FECACA; font-weight: 600; }
 .pk-event.info { background: #F1F5F9; color: var(--ink-2); border-color: var(--border); }
+.pk-dims { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; margin-top: 10px; }
+.pk-dims .input { width: 78px; padding: 6px 8px; font-size: 13px; font-variant-numeric: tabular-nums; }
+.pk-dims > span:first-child { margin-right: 4px; }
 .pk-head { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin: 14px 0 10px; }
 .pk-track { font-family: var(--mono); font-size: 16px; font-weight: 700; }
 .pk-row {

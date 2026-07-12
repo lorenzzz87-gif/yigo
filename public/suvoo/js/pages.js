@@ -618,6 +618,7 @@ function renderOrders(el) {
                   : `<span class="badge b-red" style="margin-left:6px">未匹配商品库</span>`}</div>`;
           }).join('')}</div>` : '<span class="muted small">无商品明细</span>'}
         ${o.receiver ? `<div class="small muted mt-8">收件人：${esc(o.receiver)}</div>` : ''}
+        ${o.parcel ? `<div class="small muted">包裹：${[o.parcel.l, o.parcel.w, o.parcel.h].map(v => v === '' || v == null ? '?' : v).join('×')} cm${o.parcel.kg !== '' && o.parcel.kg != null ? ` · ${o.parcel.kg} kg` : ''}</div>` : ''}
         ${o.note ? `<div class="small muted">备注：${esc(o.note)}</div>` : ''}
       </td></tr>`).join('')}
     </tbody></table></div>

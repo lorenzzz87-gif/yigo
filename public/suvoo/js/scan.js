@@ -105,6 +105,28 @@ function scanResultHTML() {
     </div>`;
 }
 
+/* ---------- Excel 导出：面单核对表 ---------- */
+function exportVerifyXLSX() {
+  const verified = DB.orders.filter(o => o.status === 'verified')
+    .sort((a, b) => (b.verifiedAt || 0) - (a.verifiedAt || 0));
+  const pending = DB.orders.filter(o => o.status === 'pending')
+    .sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
+  exportXLSX(`面单核对_${dayKey(Date.now())}.xlsx`, [
+    {
+      name: '已核对',
+      rows: [['核对时间', '渠道', '订单号', '运单号', '收件人', '商品明细', '件数', '备注'],
+        ...verified.map(o => [fmtFull(o.verifiedAt), o.channel || '', o.orderNo || '', o.trackingNo || '',
+          o.receiver || '', orderItemsSummary(o), orderPieces(o), o.note || ''])]
+    },
+    {
+      name: '待核对',
+      rows: [['创建时间', '渠道', '订单号', '运单号', '收件人', '商品明细', '件数', '备注'],
+        ...pending.map(o => [fmtFull(o.createdAt), o.channel || '', o.orderNo || '', o.trackingNo || '',
+          o.receiver || '', orderItemsSummary(o), orderPieces(o), o.note || ''])]
+    }
+  ]);
+}
+
 function renderScan(el) {
   const pendingList = DB.orders.filter(o => o.status === 'pending');
   const todayVerified = DB.orders.filter(o => o.status === 'verified' && isToday(o.verifiedAt)).length;
@@ -117,7 +139,8 @@ function renderScan(el) {
   const L = scanState.last;
   const resCls = L ? ('res-' + L.res) : '';
 
-  el.innerHTML = pageHead('扫描核对台', '扫描枪对准面单条码，回车自动核对出库') + `
+  el.innerHTML = pageHead('扫描核对台', '扫描枪对准面单条码，回车自动核对出库',
+    `<button class="btn" data-sc-xlsx>${icon('download', 15)}导出核对 Excel</button>`) + `
     <div class="scan-chips mb-14">
       <span class="chip">待核对 <b>${pendingList.length}</b> 单</span>
       <span class="chip c-green">今日已核对 <b>${todayVerified}</b></span>
@@ -178,6 +201,7 @@ function renderScan(el) {
     DB.settings.beep = e.target.checked;
     save();
   });
+  el.querySelector('[data-sc-xlsx]').addEventListener('click', exportVerifyXLSX);
   el.querySelector('[data-clear-log]')?.addEventListener('click', () => {
     scanState.session = [];
     scanState.last = null;

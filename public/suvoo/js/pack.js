@@ -8,8 +8,18 @@
 const packState = {
   currentOrderId: null,
   session: [],  // {at, code, result, orderId}  result: fast|done|force|wrong|unknown|dupw|undone
-  event: null   // {kind:'ok'|'warn'|'err'|'info', msg}  最近一次扫描反馈
+  event: null,  // {kind:'ok'|'warn'|'err'|'info', msg}  最近一次扫描反馈
+  dims: { l: '', w: '', h: '', kg: '' } // 包裹长宽厚重（选填），出库时附到订单
 };
+
+// 出库时把选填的尺寸/重量附到订单（随订单行同步上云），然后清空输入
+function attachParcel(o) {
+  const d = packState.dims;
+  const n = v => { const x = parseFloat(v); return isFinite(x) && x > 0 ? x : ''; };
+  const p = { l: n(d.l), w: n(d.w), h: n(d.h), kg: n(d.kg) };
+  if (p.l !== '' || p.w !== '' || p.h !== '' || p.kg !== '') o.parcel = p;
+  packState.dims = { l: '', w: '', h: '', kg: '' };
+}
 
 function packCurrent() {
   return packState.currentOrderId
@@ -56,6 +66,7 @@ function handlePackWaybill(code) {
   const total = req.reduce((s, l) => s + l.qty, 0);
   // 智能混合：单件订单（或无明细订单）扫面单直接出库
   if (!req.length || (total <= 1 && DB.settings.packSingleFast !== false)) {
+    attachParcel(o);
     verifyOrder(o);
     packEvt('ok', `单件订单，已直接完成出库：${o.trackingNo || o.orderNo}`);
     packLog(code, 'fast', o.id);
@@ -132,11 +143,40 @@ function handlePackItem(cur, code) {
 }
 
 function completePack(o, forced) {
+  attachParcel(o);
   verifyOrder(o); // 内部会清除 packing 并扣库存
   packState.currentOrderId = null;
   packLog(o.trackingNo || o.orderNo || '', forced ? 'force' : 'done', o.id);
   packEvt('ok', `打包完成，已出库：${o.trackingNo || o.orderNo}${forced ? '（缺件强制完成）' : ''}`);
   playBeep('ok');
+}
+
+/* ---------- Excel 导出 ---------- */
+function exportPackXLSX() {
+  const verified = DB.orders.filter(o => o.status === 'verified')
+    .sort((a, b) => (b.verifiedAt || 0) - (a.verifiedAt || 0));
+  const pending = DB.orders.filter(o => o.status === 'pending')
+    .sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
+  const pv = (o, k) => (o.parcel && o.parcel[k] !== '' && o.parcel[k] != null) ? o.parcel[k] : '';
+  exportXLSX(`打包数据_${dayKey(Date.now())}.xlsx`, [
+    {
+      name: '打包出库',
+      rows: [['出库时间', '渠道', '订单号', '运单号', '收件人', '商品明细', '件数', '长(cm)', '宽(cm)', '厚(cm)', '重量(kg)', '备注'],
+        ...verified.map(o => [fmtFull(o.verifiedAt), o.channel || '', o.orderNo || '', o.trackingNo || '',
+          o.receiver || '', orderItemsSummary(o), orderPieces(o),
+          pv(o, 'l'), pv(o, 'w'), pv(o, 'h'), pv(o, 'kg'), o.note || ''])]
+    },
+    {
+      name: '待打包',
+      rows: [['创建时间', '渠道', '订单号', '运单号', '收件人', '商品明细', '件数', '打包进度', '备注'],
+        ...pending.map(o => {
+          const t = packTotals(o);
+          return [fmtFull(o.createdAt), o.channel || '', o.orderNo || '', o.trackingNo || '',
+            o.receiver || '', orderItemsSummary(o), t.total,
+            o.packing ? `打包中 ${t.done}/${t.total}` : (t.total <= 1 ? '单件直发' : '待打包'), o.note || ''];
+        })]
+    }
+  ]);
 }
 
 /* ---------- 页面 ---------- */
@@ -205,7 +245,9 @@ function renderPack(el) {
   const doneCnt = s.filter(x => x.result === 'fast' || x.result === 'done' || x.result === 'force').length;
   const errCnt = s.filter(x => x.result === 'wrong' || x.result === 'unknown').length;
 
-  el.innerHTML = pageHead('扫码打包台', '扫面单开包裹 → 逐件扫商品装箱 → 装齐自动出库；单件订单扫面单直发') + `
+  const d = packState.dims;
+  el.innerHTML = pageHead('扫码打包台', '扫面单开包裹 → 逐件扫商品装箱 → 装齐自动出库；单件订单扫面单直发',
+    `<button class="btn" data-pk-xlsx>${icon('download', 15)}导出打包 Excel</button>`) + `
     <div class="scan-chips mb-14">
       <span class="chip">待打包 <b>${pending.length}</b> 单</span>
       <span class="chip c-green">本次完成 <b>${doneCnt}</b></span>
@@ -221,6 +263,15 @@ function renderPack(el) {
           <p class="small muted mt-8">${cur
             ? '逐件扫商品条码 / SKU · 无条码商品点行内 +1 · 装齐自动完成出库'
             : '扫运单号或订单号 · 单件订单直接出库 · 多件订单进入装箱核对'}</p>
+          <div class="pk-dims">
+            <span class="small dim">包裹尺寸/重量<span class="muted">（选填，出库时记入订单）</span></span>
+            <input class="input" type="number" min="0" step="0.1" data-dim="l" placeholder="长 cm" value="${esc(d.l)}">
+            <span class="muted">×</span>
+            <input class="input" type="number" min="0" step="0.1" data-dim="w" placeholder="宽 cm" value="${esc(d.w)}">
+            <span class="muted">×</span>
+            <input class="input" type="number" min="0" step="0.1" data-dim="h" placeholder="厚 cm" value="${esc(d.h)}">
+            <input class="input" type="number" min="0" step="0.01" data-dim="kg" placeholder="重 kg" value="${esc(d.kg)}">
+          </div>
           ${packEventHTML()}
           ${cur ? packChecklistHTML(cur) : `<div class="scan-result"><div class="res-idle">${icon('pack', 32)}<span>等待扫描面单…</span></div></div>`}
         </div>
@@ -271,6 +322,11 @@ function renderPack(el) {
     DB.settings.beep = e.target.checked;
     save();
   });
+  // 尺寸/重量输入（存内存，出库时附单）
+  el.querySelectorAll('[data-dim]').forEach(inp => inp.addEventListener('input', () => {
+    packState.dims[inp.dataset.dim] = inp.value;
+  }));
+  el.querySelector('[data-pk-xlsx]').addEventListener('click', exportPackXLSX);
   el.querySelector('[data-pk-clear]')?.addEventListener('click', () => {
     packState.session = [];
     packState.event = null;
