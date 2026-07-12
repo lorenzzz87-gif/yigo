@@ -98,6 +98,19 @@ function chunks(arr, n) {
   return out;
 }
 
+// 分页拉取整张表（PostgREST 单次最多返回 1000 行，须用 range 翻页）
+const PAGE = 1000;
+async function fetchAllRows(table) {
+  const all = [];
+  for (let from = 0; ; from += PAGE) {
+    const { data, error } = await sb.from(table).select('data').range(from, from + PAGE - 1);
+    if (error) throw error;
+    all.push(...data);
+    if (!data || data.length < PAGE) break;
+  }
+  return all;
+}
+
 async function pushTable(table, rows, snapPart) {
   const ids = new Set(rows.map(r => r.id));
   const ups = rows.filter(r => snapPart[r.id] !== recHash(r));
@@ -134,18 +147,18 @@ async function syncNow(manual = false) {
       const { error } = await sb.from('suvoo_meta').upsert({ key: 'channels', data: DB.channels });
       if (error) throw error;
     }
-    // 2) 拉取云端全量（表很小），重建本地
-    const [p, o, m, meta] = await Promise.all([
-      sb.from('suvoo_products').select('data'),
-      sb.from('suvoo_orders').select('data'),
-      sb.from('suvoo_moves').select('data'),
+    // 2) 拉取云端全量并重建本地（分页，绕过 PostgREST 单次 1000 行上限）
+    const [pRows, oRows, mRows, meta] = await Promise.all([
+      fetchAllRows('suvoo_products'),
+      fetchAllRows('suvoo_orders'),
+      fetchAllRows('suvoo_moves'),
       sb.from('suvoo_meta').select('key,data').eq('key', 'channels')
     ]);
-    for (const r of [p, o, m, meta]) if (r.error) throw r.error;
+    if (meta.error) throw meta.error;
     const before = JSON.stringify([DB.products, DB.orders, DB.moves, DB.channels]);
-    DB.products = p.data.map(r => r.data).sort((a, b) => String(a.sku).localeCompare(String(b.sku)));
-    DB.orders = o.data.map(r => r.data).sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
-    DB.moves = m.data.map(r => r.data).sort((a, b) => (b.at || 0) - (a.at || 0));
+    DB.products = pRows.map(r => r.data).sort((a, b) => String(a.sku).localeCompare(String(b.sku)));
+    DB.orders = oRows.map(r => r.data).sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
+    DB.moves = mRows.map(r => r.data).sort((a, b) => (b.at || 0) - (a.at || 0));
     if (meta.data.length && Array.isArray(meta.data[0].data) && meta.data[0].data.length) {
       DB.channels = meta.data[0].data;
     }
