@@ -3,8 +3,8 @@
    ============================================================ */
 const ROUTES = [
   { path: 'dashboard', label: '概览', icon: 'dashboard', render: renderDashboard },
-  { path: 'scan', label: '扫描核对', icon: 'scan', render: renderScan },
   { path: 'pack', label: '扫码打包', icon: 'pack', render: renderPack },
+  { path: 'scan', label: '扫描核对', icon: 'scan', render: renderScan },
   { path: 'orders', label: '订单管理', icon: 'orders', render: renderOrders },
   { path: 'products', label: '商品库存', icon: 'package', render: renderProducts },
   { path: 'inbound', label: '入库', icon: 'inbound', render: renderInbound },
