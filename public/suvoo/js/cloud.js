@@ -246,6 +246,15 @@ function updateSyncUI() {
     el.innerHTML = `<a href="#/settings" style="color:#94A3B8;display:inline-flex;align-items:center;gap:6px">
       <span style="width:8px;height:8px;border-radius:50%;background:${color};flex:0 0 8px"></span>${esc(syncStatusText())}</a>`;
   }
+  // 存储说明跟随同步状态
+  const note = document.getElementById('storageNote');
+  if (note) {
+    const synced = syncStatus.state === 'ok' || syncStatus.state === 'syncing'
+      || (syncStatus.state === 'error' && syncStatus.email);
+    note.innerHTML = synced
+      ? '数据已云端同步（' + esc(syncStatus.email) + '）<br>本机仅作离线缓存，多设备共享'
+      : '数据保存在本机浏览器<br>登录云同步或定期在「设置」导出备份';
+  }
   const badge = document.querySelector('[data-cloud-state]');
   if (badge) badge.textContent = syncStatusText();
 }

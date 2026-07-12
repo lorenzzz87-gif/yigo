@@ -27,9 +27,12 @@ function drawNav(active) {
 function drawBackupHint() {
   const box = document.getElementById('backupHint');
   if (!box) return;
+  // 已开启云同步时数据有云端副本，不再催本地备份
+  const synced = typeof syncStatus !== 'undefined' &&
+    (syncStatus.state === 'ok' || syncStatus.state === 'syncing');
   const busy = DB.orders.length + DB.moves.length;
   const stale = DB.settings.lastBackup && (Date.now() - DB.settings.lastBackup > 7 * 86400e3);
-  box.innerHTML = (busy > 30 && (!DB.settings.lastBackup || stale))
+  box.innerHTML = (!synced && busy > 30 && (!DB.settings.lastBackup || stale))
     ? `<span class="hint-pill">⚠ 建议去「设置」导出备份</span>` : '';
 }
 
