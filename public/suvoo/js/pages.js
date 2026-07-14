@@ -444,7 +444,7 @@ function renderInbound(el) {
         <div class="card-title">${icon('barcode', 16)}扫码连续入库</div>
         <div class="scan-input-wrap mb-8">${icon('barcode', 20)}
           <input class="scan-input" style="font-size:16px;padding-top:10px;padding-bottom:10px" data-inscan
-            placeholder="扫描商品条码 / 输入 SKU 后回车" autocomplete="off"></div>
+            placeholder="扫描商品条码（自动确认）/ 输入 SKU 回车" autocomplete="off"></div>
         <p class="small muted mb-8">同一商品重复扫码自动累加数量</p>
         ${inboundPending.length ? `<div class="tbl-wrap mb-8"><table class="tbl"><thead>
           <tr><th>SKU</th><th>名称</th><th class="num" style="width:90px">数量</th><th></th></tr></thead><tbody>
@@ -492,20 +492,24 @@ function renderInbound(el) {
 
   // 扫码连续入库
   const inScan = el.querySelector('[data-inscan]');
-  inScan.addEventListener('keydown', e => {
-    if (e.key !== 'Enter') return;
-    e.preventDefault();
-    const code = inScan.value.trim();
+  function inboundScan(code) {
+    code = String(code || '').trim();
     if (!code) return;
     const p = productByCode(code);
-    if (!p) { playBeep('err'); toast(`未找到商品「${code}」，请先在商品库添加`, 'error'); inScan.select(); return; }
+    if (!p) { playBeep('err'); toast(t('未找到商品「{code}」，请先在商品库添加', { code }), 'error'); inScan.select(); return; }
     const ex = inboundPending.find(x => x.sku === p.sku);
     if (ex) ex.qty++; else inboundPending.push({ sku: p.sku, qty: 1 });
     playBeep('ok');
     render();
     const ni = document.querySelector('[data-inscan]');
     if (ni) ni.focus();
+  }
+  inScan.addEventListener('keydown', e => {
+    if (e.key !== 'Enter') return;
+    e.preventDefault();
+    inboundScan(inScan.value);
   });
+  attachAutoScan(inScan, inboundScan);
   el.querySelectorAll('[data-qty-i]').forEach(inp => inp.addEventListener('change', () => {
     inboundPending[Number(inp.dataset.qtyI)].qty = Math.max(1, Number(inp.value) || 1);
     render();

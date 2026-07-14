@@ -154,7 +154,7 @@ function renderScan(el) {
         <div class="card">
           <div class="scan-input-wrap">${icon('scan', 22)}
             <input id="scanInput" class="scan-input" placeholder="扫描或输入运单号 / 订单号" autocomplete="off" spellcheck="false"></div>
-          <p class="small muted mt-8">支持运单号或订单号 · 扫描枪自动回车 · 手动输入后按 <span class="kbd">Enter</span> · 点击页面空白处自动回到输入框</p>
+          <p class="small muted mt-8">支持运单号或订单号 · 扫码自动确认（无需回车） · 手动输入按 <span class="kbd">Enter</span> · 点击页面空白处自动回到输入框</p>
           <div id="scanResult" class="scan-result ${resCls}">${scanResultHTML()}</div>
         </div>
         <div class="card mt-14">
@@ -195,6 +195,7 @@ function renderScan(el) {
   input.addEventListener('keydown', e => {
     if (e.key === 'Enter') { e.preventDefault(); handleScan(input.value); }
   });
+  attachAutoScan(input, code => handleScan(code));
   setTimeout(() => input.focus(), 30);
 
   el.querySelector('[data-beep]').addEventListener('change', e => {

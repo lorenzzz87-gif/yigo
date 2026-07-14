@@ -316,6 +316,7 @@ function renderPack(el) {
   input.addEventListener('keydown', e => {
     if (e.key === 'Enter') { e.preventDefault(); handlePackScan(input.value); }
   });
+  attachAutoScan(input, code => handlePackScan(code));
   setTimeout(() => input.focus(), 30);
 
   el.querySelector('[data-pk-beep]').addEventListener('change', e => {
