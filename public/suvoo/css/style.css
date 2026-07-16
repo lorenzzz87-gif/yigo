@@ -324,15 +324,26 @@ table.tbl { width: 100%; border-collapse: collapse; font-size: 13.5px; }
   flex-wrap: wrap;
 }
 .pk-last-row {
-  display: flex; align-items: baseline; gap: 12px;
+  display: flex; align-items: center; gap: 16px;
   padding: 10px 0; border-bottom: 1px dashed rgba(5, 150, 105, .3);
 }
 .pk-last-row:last-child { border-bottom: 0; }
-.pk-last-row b { font-size: 19px; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
-.pk-last-row .mono { font-size: 13.5px; color: var(--ink-2); flex: 0 0 auto; }
+.pk-last-main { flex: 1; min-width: 0; }
+.pk-last-name {
+  display: block; font-size: 9.5px; color: var(--ink-2);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.pk-last-sku {
+  display: block; font-size: 68px; font-weight: 800; line-height: 1.05;
+  color: var(--ink); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
 .pk-last-qty {
-  margin-left: auto; font-size: 28px; font-weight: 800; line-height: 1.1;
+  margin-left: auto; font-size: 56px; font-weight: 800; line-height: 1;
   color: var(--accent-hover); font-variant-numeric: tabular-nums; flex: 0 0 auto;
+}
+@media (max-width: 960px) {
+  .pk-last-sku { font-size: 44px; }
+  .pk-last-qty { font-size: 38px; }
 }
 .pk-total { display: flex; align-items: center; gap: 12px; margin: 12px 0 14px; }
 .pk-total .pk-bar { flex: 1; height: 10px; }

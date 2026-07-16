@@ -199,8 +199,10 @@ function packLastHTML() {
     <div class="pk-last-head">${icon('check', 18)}${esc(head)}</div>
     ${L.items.length
       ? L.items.map(it => `<div class="pk-last-row">
-          <b>${esc(it.name || it.sku)}</b>
-          <span class="mono">${esc(it.sku || '')}</span>
+          <div class="pk-last-main">
+            ${it.name && it.name !== it.sku ? `<span class="pk-last-name">${esc(it.name)}</span>` : ''}
+            <span class="pk-last-sku mono">${esc(it.sku || it.name)}</span>
+          </div>
           <span class="pk-last-qty">×${it.qty}</span>
         </div>`).join('')
       : `<p class="small dim">${esc(t('（无商品明细）'))}</p>`}
