@@ -9,8 +9,13 @@ const packState = {
   currentOrderId: null,
   session: [],  // {at, code, result, orderId}  result: fast|done|force|wrong|unknown|dupw|undone
   event: null,  // {kind:'ok'|'warn'|'err'|'info', msg}  最近一次扫描反馈
-  dims: { l: '', w: '', h: '', kg: '' } // 包裹长宽厚重（选填），出库时附到订单
+  dims: { l: '', w: '', h: '', kg: '' }, // 包裹长宽厚重（选填），出库时附到订单
+  lastContents: null // {kind:'fast'|'done', no, items:[{sku,name,qty}]} 最近出库包裹内容（大字显示给打包员）
 };
+
+function rememberContents(o, kind) {
+  packState.lastContents = { kind, no: o.trackingNo || o.orderNo || '', items: packRequired(o) };
+}
 
 // 出库时把选填的尺寸/重量附到订单（随订单行同步上云），然后清空输入
 function attachParcel(o) {
@@ -67,6 +72,7 @@ function handlePackWaybill(code) {
   // 智能混合：单件订单（或无明细订单）扫面单直接出库
   if (!req.length || (total <= 1 && DB.settings.packSingleFast !== false)) {
     attachParcel(o);
+    rememberContents(o, 'fast');
     verifyOrder(o);
     packEvt('ok', t('单件订单，已直接完成出库：{no}', {no: o.trackingNo || o.orderNo}));
     packLog(code, 'fast', o.id);
@@ -144,6 +150,7 @@ function handlePackItem(cur, code) {
 
 function completePack(o, forced) {
   attachParcel(o);
+  rememberContents(o, 'done');
   verifyOrder(o); // 内部会清除 packing 并扣库存
   packState.currentOrderId = null;
   packLog(o.trackingNo || o.orderNo || '', forced ? 'force' : 'done', o.id);
@@ -177,6 +184,27 @@ function exportPackXLSX() {
         })]
     }
   ]);
+}
+
+/* ---------- 最近出库包裹内容（大字，给打包员看） ---------- */
+function packLastHTML() {
+  const L = packState.lastContents;
+  if (!L) {
+    return `<div class="scan-result"><div class="res-idle">${icon('pack', 32)}<span>等待扫描面单…</span></div></div>`;
+  }
+  const head = L.kind === 'fast'
+    ? t('单件直发 {no} · 请装入：', { no: L.no })
+    : t('已出库 {no} · 包裹内容：', { no: L.no });
+  return `<div class="pk-last">
+    <div class="pk-last-head">${icon('check', 18)}${esc(head)}</div>
+    ${L.items.length
+      ? L.items.map(it => `<div class="pk-last-row">
+          <b>${esc(it.name || it.sku)}</b>
+          <span class="mono">${esc(it.sku || '')}</span>
+          <span class="pk-last-qty">×${it.qty}</span>
+        </div>`).join('')
+      : `<p class="small dim">${esc(t('（无商品明细）'))}</p>`}
+  </div>`;
 }
 
 /* ---------- 页面 ---------- */
@@ -273,7 +301,7 @@ function renderPack(el) {
             <input class="input" type="number" min="0" step="0.01" data-dim="kg" placeholder="重 kg" value="${esc(d.kg)}">
           </div>
           ${packEventHTML()}
-          ${cur ? packChecklistHTML(cur) : `<div class="scan-result"><div class="res-idle">${icon('pack', 32)}<span>等待扫描面单…</span></div></div>`}
+          ${cur ? packChecklistHTML(cur) : packLastHTML()}
         </div>
         <div class="card mt-14">
           <div class="card-title">${icon('orders', 16)}打包队列<span class="spacer"></span>
