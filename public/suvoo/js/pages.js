@@ -914,24 +914,18 @@ function cloudCardHTML() {
   const cfg = getCloudCfg();
   const st = syncStatus.state;
   let body = '';
-  if (st === 'nolib') {
-    body = `<p class="small neg">Supabase 组件加载失败（可能无网络）。刷新页面重试；离线时应用照常可用，数据存本机。</p>`;
-  } else if (st === 'login' || st === 'off') {
+  if (st === 'login' || st === 'off') {
     body = `
-      <p class="small dim mb-14">登录后，商品 / 订单 / 流水在多设备之间自动同步（改动后约 2 秒推送，每 45 秒拉取合并；库存按流水汇总计算，多台设备同时扫单不会互相覆盖）。<br>
-      <b>首次使用：</b>①在 Supabase SQL 编辑器执行项目根目录的 <span class="kbd">suvoo-cloud-schema.sql</span>；②在 Supabase 后台 Authentication → Users 创建登录账号（邮箱需在白名单内）。</p>
-      <div class="form-row">
-        <div class="field"><label>Supabase 地址</label>
-          <input class="input mono" data-cl-url value="${esc(cfg.url)}"></div>
-        <div class="field"><label>anon 公钥</label>
-          <input class="input mono" data-cl-key value="${esc(cfg.key)}"></div>
-      </div>
+      <p class="small dim mb-14">登录后，商品 / 订单 / 流水在多设备之间自动同步（改动后约 2 秒推送，每 45 秒增量拉取；库存按流水汇总计算，多台设备同时扫单不会互相覆盖）。使用管理员提供的账号密码登录即可。</p>
+      ${syncStatus.error ? `<p class="small neg mb-8">${esc(syncStatus.error)}</p>` : ''}
       <div class="form-row">
         <div class="field"><label>登录邮箱</label>
-          <input class="input" type="email" data-cl-email autocomplete="username" placeholder="在 Supabase 后台创建的账号"></div>
+          <input class="input" type="email" data-cl-email autocomplete="username" placeholder="管理员提供的账号"></div>
         <div class="field"><label>密码</label>
           <input class="input" type="password" data-cl-pass autocomplete="current-password"></div>
       </div>
+      <div class="field"><label>同步服务地址（一般不用改）</label>
+        <input class="input mono" data-cl-url value="${esc(cfg.url)}"></div>
       <button class="btn btn-accent" data-cl-login>${icon('upload', 15)}登录并开始同步</button>`;
   } else {
     body = `
@@ -999,14 +993,13 @@ function renderSettings(el) {
   el.querySelector('[data-cl-login]')?.addEventListener('click', async e => {
     const btn = e.currentTarget;
     const url = el.querySelector('[data-cl-url]').value.trim();
-    const key = el.querySelector('[data-cl-key]').value.trim();
     const email = el.querySelector('[data-cl-email]').value.trim();
     const pass = el.querySelector('[data-cl-pass]').value;
-    if (!url || !key) return toast('请填写 Supabase 地址和 anon 公钥', 'warn');
+    if (!url) return toast('请填写同步服务地址', 'warn');
     if (!email || !pass) return toast('请填写登录邮箱和密码', 'warn');
     btn.disabled = true;
     try {
-      cloudReconnect({ url, key });
+      cloudReconnect({ url });
       await cloudLogin(email, pass);
       render();
     } catch (err) {

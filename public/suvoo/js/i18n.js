@@ -189,6 +189,13 @@ const I18N = {
     '导入备份恢复': 'Restore from backup', '清空全部数据': 'Wipe all data',
     '从未备份': 'never', '云同步（多设备共享）': 'Cloud sync (multi-device)',
     'Supabase 地址': 'Supabase URL', 'anon 公钥': 'anon key',
+    '同步服务地址（一般不用改）': 'Sync server URL (rarely changed)',
+    '管理员提供的账号': 'Account from your admin',
+    '请填写同步服务地址': 'Enter the sync server URL',
+    '请填写登录邮箱和密码': 'Enter email and password',
+    '登录已过期，请重新登录': 'Session expired — log in again',
+    '登录后，商品 / 订单 / 流水在多设备之间自动同步（改动后约 {} 秒推送，每 {} 秒增量拉取；库存按流水汇总计算，多台设备同时扫单不会互相覆盖）。使用管理员提供的账号密码登录即可。':
+      'After login, products / orders / logs sync across devices (pushed ~{}s after changes, incremental pull every {}s; stock is computed from the log). Just log in with the account from your admin.',
     '登录邮箱': 'Login email', '密码': 'Password', '在 Supabase 后台创建的账号': 'Account created in Supabase',
     '登录并开始同步': 'Log in & sync', '立即同步': 'Sync now', '退出登录': 'Log out',
     // —— 补充：流水事由 / 标签 / 设置页长句 ——
@@ -337,6 +344,13 @@ const I18N = {
     '导入备份恢复': 'Ripristina backup', '清空全部数据': 'Cancella tutto',
     '从未备份': 'mai', '云同步（多设备共享）': 'Cloud (multi-dispositivo)',
     'Supabase 地址': 'URL Supabase', 'anon 公钥': 'chiave anon',
+    '同步服务地址（一般不用改）': 'URL server (di solito non cambia)',
+    '管理员提供的账号': "Account fornito dall'amministratore",
+    '请填写同步服务地址': "Inserisci l'URL del server",
+    '请填写登录邮箱和密码': 'Inserisci email e password',
+    '登录已过期，请重新登录': 'Sessione scaduta — accedi di nuovo',
+    '登录后，商品 / 订单 / 流水在多设备之间自动同步（改动后约 {} 秒推送，每 {} 秒增量拉取；库存按流水汇总计算，多台设备同时扫单不会互相覆盖）。使用管理员提供的账号密码登录即可。':
+      "Dopo l'accesso, prodotti / ordini / movimenti si sincronizzano tra dispositivi (invio ~{}s dopo le modifiche, pull incrementale ogni {}s). Accedi con l'account fornito dall'amministratore.",
     '登录邮箱': 'Email', '密码': 'Password', '在 Supabase 后台创建的账号': 'Account creato in Supabase',
     '登录并开始同步': 'Accedi e sincronizza', '立即同步': 'Sincronizza ora', '退出登录': 'Esci',
     // —— 补充：流水事由 / 标签 / 设置页长句 ——

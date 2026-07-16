@@ -1,0 +1,13 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head><meta charset="UTF-8"><title>SUVOO 重置本机缓存</title></head>
+<body style="font-family:sans-serif;padding:40px;text-align:center">
+<p id="msg">正在清空本机缓存…</p>
+<script>
+// 测试/排障用：清空本机 localStorage（云端数据不受影响，登录后会重新拉取）
+localStorage.clear();
+document.getElementById('msg').textContent = '本机缓存已清空，正在跳转…';
+setTimeout(() => location.replace('./index.html'), 600);
+</script>
+</body>
+</html>

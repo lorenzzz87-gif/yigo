@@ -1,32 +1,50 @@
 /* ============================================================
-   SUVOO 进销存 — 云同步（Supabase）
-   行级差异同步：本地为主，改动后 2 秒推送，每 45 秒拉取合并。
-   库存以流水（moves）为准，拉取后重算，多设备并发扫单不丢数。
+   SUVOO 进销存 — 云同步（Cloudflare Worker + D1）
+   增量同步：本地改动差异推送（2 秒防抖），每 45 秒增量拉取
+   （updated_at > since，含删除墓碑），流量只与变动量相关。
+   库存以流水为准，拉取合并后重算，多设备并发不互相覆盖。
    ============================================================ */
-const CLOUD_CFG_KEY = 'suvoo_ims_cloud';
+const CLOUD_CFG_KEY = 'suvoo_ims_cloud2';
+const CLOUD_TOKEN_KEY = 'suvoo_cloud_token';
+const CLOUD_EMAIL_KEY = 'suvoo_cloud_email';
 const SYNC_SNAP_KEY = 'suvoo_ims_sync_snap';
-const CLOUD_DEFAULTS = {
-  url: 'https://zzsocnuqopudapecgkzu.supabase.co',
-  key: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inp6c29jbnVxb3B1ZGFwZWNna3p1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODE2Mzk4MDQsImV4cCI6MjA5NzIxNTgwNH0.AwXd0HLmWQhlmltzeHRCKuUOqnluSBoB0JoSyQ4Ouzg'
-};
+const SYNC_PULL_TS_KEY = 'suvoo_ims_pull_ts';
+const CLOUD_DEFAULTS = { url: 'https://suvoo-api.lorenzzz87.workers.dev' };
 const SYNC_PUSH_DELAY = 2000;
 const SYNC_PULL_EVERY = 45000;
+const PUSH_CHUNK = 400;
 
-let sb = null;
 let syncDebounce = null;
 let syncTicker = null;
 let syncBusy = false;
-const syncStatus = { state: 'off', lastAt: null, error: '', email: '' };
-// state: off | nolib | login | syncing | ok | error
+const syncStatus = { state: 'off', lastAt: null, error: '', email: localStorage.getItem(CLOUD_EMAIL_KEY) || '' };
+// state: off | login | syncing | ok | error
 
 function getCloudCfg() {
   try {
     const raw = localStorage.getItem(CLOUD_CFG_KEY);
-    if (raw) { const c = JSON.parse(raw); if (c && c.url && c.key) return c; }
+    if (raw) { const c = JSON.parse(raw); if (c && c.url) return c; }
   } catch (e) { /* ignore */ }
   return { ...CLOUD_DEFAULTS };
 }
 function saveCloudCfg(cfg) { localStorage.setItem(CLOUD_CFG_KEY, JSON.stringify(cfg)); }
+function cloudToken() { return localStorage.getItem(CLOUD_TOKEN_KEY) || ''; }
+
+async function api(path, opts = {}) {
+  const cfg = getCloudCfg();
+  const headers = { 'Content-Type': 'application/json', ...(opts.headers || {}) };
+  const tk = cloudToken();
+  if (tk) headers['Authorization'] = 'Bearer ' + tk;
+  const res = await fetch(cfg.url.replace(/\/$/, '') + path, { ...opts, headers });
+  let body = null;
+  try { body = await res.json(); } catch (e) { /* ignore */ }
+  if (!res.ok) {
+    const err = new Error((body && body.error) || ('HTTP ' + res.status));
+    err.status = res.status;
+    throw err;
+  }
+  return body;
+}
 
 /* ---------- 差异快照（id → hash） ---------- */
 function recHash(obj) {
@@ -61,7 +79,7 @@ function stockFromMoves() {
   }
   return sum;
 }
-// 首次/异常时：把「直接设置的库存」与流水的差额补一条校准流水，让库存完全可由流水推导
+// 把「直接设置的库存」与流水差额补一条校准流水，让库存完全可由流水推导
 function ensureStockBaseline() {
   const sums = stockFromMoves();
   let changed = false;
@@ -87,93 +105,105 @@ function recomputeStocks() {
 
 /* ---------- 同步引擎 ---------- */
 function scheduleSync() {
-  if (!sb || syncStatus.state === 'off' || syncStatus.state === 'login' || syncBusy) return;
+  if (syncStatus.state === 'off' || syncStatus.state === 'login' || syncBusy) return;
   clearTimeout(syncDebounce);
   syncDebounce = setTimeout(() => syncNow(), SYNC_PUSH_DELAY);
 }
 
-function chunks(arr, n) {
-  const out = [];
-  for (let i = 0; i < arr.length; i += n) out.push(arr.slice(i, i + n));
-  return out;
+function buildDiffOps() {
+  const ops = []; // {tbl, up:{id,data}} | {tbl, del:id} | {meta:{key,data}}
+  const pairs = [['products', DB.products], ['orders', DB.orders], ['moves', DB.moves]];
+  for (const [tbl, list] of pairs) {
+    const snapPart = syncSnap[tbl] || {};
+    const ids = new Set();
+    for (const r of list) {
+      ids.add(r.id);
+      if (snapPart[r.id] !== recHash(r)) ops.push({ tbl, up: { id: r.id, data: r } });
+    }
+    for (const id of Object.keys(snapPart)) {
+      if (!ids.has(id)) ops.push({ tbl, del: id });
+    }
+  }
+  if (recHash(DB.channels) !== syncSnap.channels) {
+    ops.push({ meta: { key: 'channels', data: DB.channels } });
+  }
+  return ops;
 }
 
-// 分页拉取整张表（PostgREST 单次最多返回 1000 行，须用 range 翻页）
-const PAGE = 1000;
-async function fetchAllRows(table) {
-  const all = [];
-  for (let from = 0; ; from += PAGE) {
-    const { data, error } = await sb.from(table).select('data').range(from, from + PAGE - 1);
-    if (error) throw error;
-    all.push(...data);
-    if (!data || data.length < PAGE) break;
+async function pushOps(ops) {
+  for (let i = 0; i < ops.length; i += PUSH_CHUNK) {
+    const chunk = ops.slice(i, i + PUSH_CHUNK);
+    const payload = { products: { up: [], del: [] }, orders: { up: [], del: [] }, moves: { up: [], del: [] }, meta: { up: [] } };
+    for (const op of chunk) {
+      if (op.meta) payload.meta.up.push(op.meta);
+      else if (op.up) payload[op.tbl].up.push(op.up);
+      else payload[op.tbl].del.push(op.del);
+    }
+    await api('/api/push', { method: 'POST', body: JSON.stringify(payload) });
   }
-  return all;
 }
 
-async function pushTable(table, rows, snapPart) {
-  const ids = new Set(rows.map(r => r.id));
-  const ups = rows.filter(r => snapPart[r.id] !== recHash(r));
-  const dels = Object.keys(snapPart).filter(id => !ids.has(id));
-  for (const c of chunks(ups, 400)) {
-    const { error } = await sb.from(table).upsert(c.map(r => ({ id: r.id, data: r })));
-    if (error) throw error;
+function applyDelta(list, rows) {
+  if (!rows || !rows.length) return { list, changed: false };
+  const map = new Map(list.map(r => [r.id, r]));
+  for (const row of rows) {
+    if (row.deleted) map.delete(row.id);
+    else { try { map.set(row.id, JSON.parse(row.data)); } catch (e) { /* skip bad row */ } }
   }
-  for (const c of chunks(dels, 400)) {
-    const { error } = await sb.from(table).delete().in('id', c);
-    if (error) throw error;
-  }
-  return ups.length + dels.length;
+  return { list: [...map.values()], changed: true };
 }
 
 async function syncNow(manual = false) {
-  if (!sb || syncBusy) return;
-  if (syncStatus.state === 'off' || syncStatus.state === 'login' || syncStatus.state === 'nolib') return;
+  if (syncBusy) return;
+  if (syncStatus.state === 'off' || (!cloudToken() && !manual)) return;
+  if (!cloudToken()) { setSyncState('login'); return; }
   // 弹窗打开时跳过（避免正在编辑的对象被拉取替换）
-  if (document.querySelector('#modalRoot .modal-overlay')) { if (!manual) return; }
-  const { data: sess } = await sb.auth.getSession();
-  if (!sess || !sess.session) { setSyncState('login'); return; }
-  syncStatus.email = sess.session.user.email || '';
+  if (document.querySelector('#modalRoot .modal-overlay') && !manual) return;
   syncBusy = true;
   setSyncState('syncing');
   try {
     ensureStockBaseline();
     // 1) 推送本地差异
-    let pushed = 0;
-    pushed += await pushTable('suvoo_products', DB.products, syncSnap.products);
-    pushed += await pushTable('suvoo_orders', DB.orders, syncSnap.orders);
-    pushed += await pushTable('suvoo_moves', DB.moves, syncSnap.moves);
-    if (recHash(DB.channels) !== syncSnap.channels) {
-      const { error } = await sb.from('suvoo_meta').upsert({ key: 'channels', data: DB.channels });
-      if (error) throw error;
+    const ops = buildDiffOps();
+    if (ops.length) await pushOps(ops);
+    // 2) 增量拉取（updated_at > since，含删除墓碑）
+    const since = Number(localStorage.getItem(SYNC_PULL_TS_KEY) || 0);
+    const out = await api('/api/pull?since=' + since);
+    let changed = ops.length > 0;
+    let r = applyDelta(DB.products, out.products);
+    if (r.changed) { DB.products = r.list.sort((a, b) => String(a.sku).localeCompare(String(b.sku))); changed = true; }
+    r = applyDelta(DB.orders, out.orders);
+    if (r.changed) { DB.orders = r.list.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0)); changed = true; }
+    r = applyDelta(DB.moves, out.moves);
+    if (r.changed) { DB.moves = r.list.sort((a, b) => (b.at || 0) - (a.at || 0)); changed = true; }
+    for (const m of (out.meta || [])) {
+      if (m.key === 'channels') {
+        try {
+          const ch = JSON.parse(m.data);
+          if (Array.isArray(ch) && ch.length) { DB.channels = ch; changed = true; }
+        } catch (e) { /* ignore */ }
+      }
     }
-    // 2) 拉取云端全量并重建本地（分页，绕过 PostgREST 单次 1000 行上限）
-    const [pRows, oRows, mRows, meta] = await Promise.all([
-      fetchAllRows('suvoo_products'),
-      fetchAllRows('suvoo_orders'),
-      fetchAllRows('suvoo_moves'),
-      sb.from('suvoo_meta').select('key,data').eq('key', 'channels')
-    ]);
-    if (meta.error) throw meta.error;
-    const before = JSON.stringify([DB.products, DB.orders, DB.moves, DB.channels]);
-    DB.products = pRows.map(r => r.data).sort((a, b) => String(a.sku).localeCompare(String(b.sku)));
-    DB.orders = oRows.map(r => r.data).sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
-    DB.moves = mRows.map(r => r.data).sort((a, b) => (b.at || 0) - (a.at || 0));
-    if (meta.data.length && Array.isArray(meta.data[0].data) && meta.data[0].data.length) {
-      DB.channels = meta.data[0].data;
+    if (changed) {
+      recomputeStocks();
+      save();
+      rebuildSnap();
     }
-    recomputeStocks();
-    save();
-    rebuildSnap();
+    localStorage.setItem(SYNC_PULL_TS_KEY, String((out.now || Date.now()) - 2000)); // 2 秒重叠防边界漏行
     syncStatus.lastAt = Date.now();
     setSyncState('ok');
-    const after = JSON.stringify([DB.products, DB.orders, DB.moves, DB.channels]);
-    if (before !== after && !document.querySelector('#modalRoot .modal-overlay')) render();
+    if (changed && !document.querySelector('#modalRoot .modal-overlay')) render();
     if (manual) toast('云同步完成', 'success');
   } catch (e) {
     console.error('同步失败', e);
-    syncStatus.error = friendlySyncError(e);
-    setSyncState('error');
+    if (e && e.status === 401) {
+      localStorage.removeItem(CLOUD_TOKEN_KEY);
+      syncStatus.error = '登录已过期，请重新登录';
+      setSyncState('login');
+    } else {
+      syncStatus.error = friendlySyncError(e);
+      setSyncState('error');
+    }
     if (manual) toast('同步失败：' + syncStatus.error, 'error');
   } finally {
     syncBusy = false;
@@ -182,14 +212,9 @@ async function syncNow(manual = false) {
 }
 
 function friendlySyncError(e) {
-  const msg = String((e && (e.message || e.hint)) || e);
-  if (/does not exist|PGRST205|Could not find the table/i.test(msg)) {
-    return '云端数据表不存在，请先在 Supabase SQL 编辑器执行 suvoo-cloud-schema.sql';
-  }
-  if (/row-level security|permission denied|42501/i.test(msg)) {
-    return '没有权限：请确认登录邮箱已加入 suvoo_users 白名单';
-  }
-  if (/Failed to fetch|NetworkError|network/i.test(msg)) return '网络不可用，恢复后会自动重试';
+  const msg = String((e && e.message) || e);
+  if (/invalid_credentials/i.test(msg)) return '邮箱或密码不正确';
+  if (/Failed to fetch|NetworkError|network|Load failed/i.test(msg)) return '网络不可用，恢复后会自动重试';
   return msg.slice(0, 120);
 }
 
@@ -203,10 +228,15 @@ function startSyncLoop() {
 
 /* ---------- 登录 / 登出 ---------- */
 async function cloudLogin(email, password) {
-  if (!sb) throw new Error('Supabase 未初始化');
-  const { data, error } = await sb.auth.signInWithPassword({ email, password });
-  if (error) throw new Error(/Invalid login/i.test(error.message) ? '邮箱或密码不正确（需先在 Supabase 后台创建账号）' : error.message);
-  syncStatus.email = data.user.email || email;
+  let out;
+  try {
+    out = await api('/api/login', { method: 'POST', body: JSON.stringify({ email, password }) });
+  } catch (e) {
+    throw new Error(friendlySyncError(e));
+  }
+  localStorage.setItem(CLOUD_TOKEN_KEY, out.token);
+  localStorage.setItem(CLOUD_EMAIL_KEY, out.email);
+  syncStatus.email = out.email;
   setSyncState('syncing');
   startSyncLoop();
   await syncNow(true);
@@ -214,21 +244,17 @@ async function cloudLogin(email, password) {
 async function cloudLogout() {
   clearInterval(syncTicker);
   clearTimeout(syncDebounce);
-  if (sb) await sb.auth.signOut();
+  localStorage.removeItem(CLOUD_TOKEN_KEY);
   syncStatus.email = '';
   setSyncState('login');
   toast('已退出云同步，数据仍保留在本机');
 }
-function cloudReconnect(cfg) {
-  saveCloudCfg(cfg);
-  sb = window.supabase ? window.supabase.createClient(cfg.url, cfg.key) : null;
-}
+function cloudReconnect(cfg) { saveCloudCfg(cfg); }
 
 /* ---------- 状态指示 ---------- */
 function syncStatusText() {
   switch (syncStatus.state) {
     case 'off': return '云同步未启用';
-    case 'nolib': return '云同步组件加载失败';
     case 'login': return '云同步：待登录';
     case 'syncing': return '云同步中…';
     case 'error': return '同步失败，自动重试中';
@@ -242,11 +268,10 @@ function syncStatusText() {
 function updateSyncUI() {
   const el = document.getElementById('syncStatus');
   if (el) {
-    const color = { ok: '#34D399', syncing: '#FBBF24', error: '#F87171', login: '#94A3B8', off: '#64748B', nolib: '#F87171' }[syncStatus.state] || '#64748B';
+    const color = { ok: '#34D399', syncing: '#FBBF24', error: '#F87171', login: '#94A3B8', off: '#64748B' }[syncStatus.state] || '#64748B';
     el.innerHTML = `<a href="#/settings" style="color:#94A3B8;display:inline-flex;align-items:center;gap:6px">
       <span style="width:8px;height:8px;border-radius:50%;background:${color};flex:0 0 8px"></span>${esc(syncStatusText())}</a>`;
   }
-  // 存储说明跟随同步状态
   const note = document.getElementById('storageNote');
   if (note) {
     const synced = syncStatus.state === 'ok' || syncStatus.state === 'syncing'
@@ -265,20 +290,11 @@ function updateSyncUI() {
 
 /* ---------- 启动 ---------- */
 async function initCloud() {
-  if (!window.supabase) { setSyncState('nolib'); return; }
-  const cfg = getCloudCfg();
-  sb = window.supabase.createClient(cfg.url, cfg.key);
-  try {
-    const { data } = await sb.auth.getSession();
-    if (data && data.session) {
-      syncStatus.email = data.session.user.email || '';
-      setSyncState('syncing');
-      startSyncLoop();
-      syncNow();
-    } else {
-      setSyncState('login');
-    }
-  } catch (e) {
+  if (cloudToken()) {
+    setSyncState('syncing');
+    startSyncLoop();
+    syncNow();
+  } else {
     setSyncState('login');
   }
 }
