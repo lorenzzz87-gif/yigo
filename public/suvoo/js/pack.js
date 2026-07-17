@@ -344,7 +344,7 @@ function renderPack(el) {
 
   const input = el.querySelector('#packInput');
   input.addEventListener('keydown', e => {
-    if (e.key === 'Enter') { e.preventDefault(); handlePackScan(input.value); }
+    if (e.key === 'Enter' && !e.isComposing) { e.preventDefault(); handlePackScan(input.value); }
   });
   attachAutoScan(input, code => handlePackScan(code));
   setTimeout(() => input.focus(), 30);

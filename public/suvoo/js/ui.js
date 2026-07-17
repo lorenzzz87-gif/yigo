@@ -225,7 +225,11 @@ async function exportXLSX(filename, sheets) {
    检测到高速输入且停顿 300ms 即视为一次完整扫码，自动触发。
    粘贴单号（单事件整串进入）同样自动触发。手动打字不受影响。 */
 function attachAutoScan(input, fire) {
-  let firstTs = 0, timer = null;
+  let firstTs = 0, timer = null, composing = false;
+  // 输入法（IME）组字期间不做任何自动判定——扫码工位请使用英文输入法，
+  // 否则拼音候选会把扫入的数字当成选词指令吃掉（如 UHA 后的 1）
+  input.addEventListener('compositionstart', () => { composing = true; clearTimeout(timer); });
+  input.addEventListener('compositionend', () => { composing = false; });
   input.addEventListener('input', () => {
     const v = input.value.trim();
     clearTimeout(timer);
@@ -234,17 +238,19 @@ function attachAutoScan(input, fire) {
     if (!firstTs) firstTs = now;
     // 打字速度只看输入事件本身的间隔（与定时器何时触发无关，防主线程繁忙误判）
     const perChar = (now - firstTs) / v.length;
+    if (composing) return;
     timer = setTimeout(() => {
       // 回车已处理（元素被重渲染移除）或内容已变 → 不再触发，避免一次扫码处理两遍
       if (!document.contains(input)) return;
       const cur = input.value.trim();
       if (cur !== v || cur.length < 5) return;
       if (perChar < 40) { firstTs = 0; fire(cur); }
-    }, 300);
+    }, 500);
   });
-  // 扫描枪带回车后缀 / 手动回车：立即处理的同时取消挂起的自动确认，防止双触发
+  // 扫描枪带回车后缀 / 手动回车：立即处理的同时取消挂起的自动确认，防止双触发；
+  // 输入法确认组字的回车（isComposing）不算提交
   input.addEventListener('keydown', e => {
-    if (e.key === 'Enter') { firstTs = 0; clearTimeout(timer); }
+    if (e.key === 'Enter' && !e.isComposing) { firstTs = 0; clearTimeout(timer); }
   });
 }
 

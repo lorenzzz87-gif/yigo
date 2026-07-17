@@ -505,7 +505,7 @@ function renderInbound(el) {
     if (ni) ni.focus();
   }
   inScan.addEventListener('keydown', e => {
-    if (e.key !== 'Enter') return;
+    if (e.key !== 'Enter' || e.isComposing) return;
     e.preventDefault();
     inboundScan(inScan.value);
   });

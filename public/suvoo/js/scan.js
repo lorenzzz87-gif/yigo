@@ -193,7 +193,7 @@ function renderScan(el) {
 
   const input = el.querySelector('#scanInput');
   input.addEventListener('keydown', e => {
-    if (e.key === 'Enter') { e.preventDefault(); handleScan(input.value); }
+    if (e.key === 'Enter' && !e.isComposing) { e.preventDefault(); handleScan(input.value); }
   });
   attachAutoScan(input, code => handleScan(code));
   setTimeout(() => input.focus(), 30);
