@@ -12,7 +12,7 @@ function defaultDB() {
                     //  items:[{sku,name,qty}], status:'pending'|'verified', createdAt, verifiedAt}
     moves: [],      // {id, at, type:'in'|'out'|'adjust', sku, name, qty(signed), reason, ref, note}
     channels: ['淘宝', '拼多多', '抖音', '微信', 'Shopify', '其他'],
-    settings: { beep: true, deduct: true, packSingleFast: true, lastBackup: null }
+    settings: { beep: true, deduct: true, packSingleFast: true, printAgent: false, printAgentUrl: 'http://127.0.0.1:17777', lastBackup: null }
   };
 }
 

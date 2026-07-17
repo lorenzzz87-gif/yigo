@@ -17,6 +17,21 @@ function rememberContents(o, kind) {
   packState.lastContents = { kind, no: o.trackingNo || o.orderNo || '', items: packRequired(o) };
 }
 
+/* ---------- 面单打印助手（本工位局域打印，见 print-agent/安装说明） ---------- */
+async function agentPrint(no) {
+  if (DB.settings.printAgent !== true || !no) return;
+  const base = (DB.settings.printAgentUrl || 'http://127.0.0.1:17777').replace(/\/$/, '');
+  try {
+    const res = await fetch(base + '/print?no=' + encodeURIComponent(no), { signal: AbortSignal.timeout(10000) });
+    const d = await res.json().catch(() => ({}));
+    if (res.ok) toast(t('面单已发送打印：{no}', { no }), 'success');
+    else if (d.error === 'not_found') toast(t('打印助手：面单文件夹里没找到 {no}', { no }), 'warn');
+    else toast(t('面单打印失败:{msg}', { msg: d.error || res.status }), 'error');
+  } catch (e) {
+    toast(t('打印助手未运行或无法连接，请在打包电脑启动 start.bat'), 'warn');
+  }
+}
+
 // 出库时把选填的尺寸/重量附到订单（随订单行同步上云），然后清空输入
 function attachParcel(o) {
   const d = packState.dims;
@@ -77,6 +92,7 @@ function handlePackWaybill(code) {
     packEvt('ok', t('单件订单，已直接完成出库：{no}', {no: o.trackingNo || o.orderNo}));
     packLog(code, 'fast', o.id);
     playBeep('ok');
+    agentPrint(o.trackingNo);
     return;
   }
   const resume = !!o.packing;
@@ -85,6 +101,7 @@ function handlePackWaybill(code) {
     save();
   }
   packState.currentOrderId = o.id;
+  if (!resume) agentPrint(o.trackingNo);
   const tot = packTotals(o);
   packEvt('info', resume
     ? t('继续打包（此前已装 {done}/{total} 件），请扫商品条码', {done: tot.done, total: tot.total})
@@ -196,7 +213,8 @@ function packLastHTML() {
     ? t('单件直发 {no} · 请装入：', { no: L.no })
     : t('已出库 {no} · 包裹内容：', { no: L.no });
   return `<div class="pk-last">
-    <div class="pk-last-head">${icon('check', 18)}${esc(head)}</div>
+    <div class="pk-last-head">${icon('check', 18)}${esc(head)}
+      ${DB.settings.printAgent && L.no ? `<button class="btn btn-sm" data-pk-reprint="${esc(L.no)}" title="重打面单">${icon('printer', 13)}</button>` : ''}</div>
     ${L.items.length
       ? L.items.map(it => `<div class="pk-last-row">
           <div class="pk-last-main">
@@ -224,6 +242,7 @@ function packChecklistHTML(o) {
     <div class="pk-head">
       ${channelBadge(o.channel)}
       <span class="pk-track">${esc(o.trackingNo || o.orderNo || '')}</span>
+      ${DB.settings.printAgent ? `<button class="btn btn-sm" data-pk-reprint="${esc(o.trackingNo || o.orderNo || '')}" title="重打面单">${icon('printer', 13)}</button>` : ''}
       ${o.receiver ? `<span class="dim small"><span>收件</span> ${esc(o.receiver)}</span>` : ''}
       ${o.note ? `<span class="muted small"><span>备注：</span>${esc(o.note)}</span>` : ''}
     </div>
@@ -363,6 +382,10 @@ function renderPack(el) {
     packState.event = null;
     render();
   });
+  el.querySelectorAll('[data-pk-reprint]').forEach(btn => btn.addEventListener('click', () => {
+    agentPrint(btn.dataset.pkReprint);
+    focusPack();
+  }));
 
   // 行内 +1 / −1（无条码兜底、误扫回退）
   el.querySelectorAll('[data-pk-plus]').forEach(b => b.addEventListener('click', () => {

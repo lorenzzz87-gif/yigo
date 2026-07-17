@@ -972,6 +972,18 @@ function renderSettings(el) {
       </div>
     </div>
     <div class="card">
+      <div class="card-title">${icon('printer', 16)}面单打印助手</div>
+      <p class="small dim mb-14">在打包电脑运行打印助手后，扫码打包页扫到运单号会自动从面单文件夹的 PDF 中找到对应页并打印。安装方法见项目 <span class="kbd">print-agent</span> 文件夹（或下载 <a href="print-agent.zip" download>print-agent.zip</a>）。</p>
+      <div class="setting-line">
+        <div class="sl-txt"><b>启用（仅本工位）</b><span>扫到运单号 / 开始打包时自动打印面单</span></div>
+        <label class="checkbox-line"><input type="checkbox" data-set="printAgent" ${DB.settings.printAgent ? 'checked' : ''}>开启</label>
+      </div>
+      <div class="flex" style="flex-wrap:wrap">
+        <input class="input mono" style="width:280px" data-pa-url value="${esc(DB.settings.printAgentUrl || 'http://127.0.0.1:17777')}" placeholder="http://127.0.0.1:17777">
+        <button class="btn" data-pa-test>${icon('printer', 15)}测试连接</button>
+      </div>
+    </div>
+    <div class="card">
       <div class="card-title">${icon('save', 16)}数据备份</div>
       <p class="small dim mb-14">所有数据仅保存在本机浏览器（localStorage）。清除浏览器数据会导致丢失，<b>请定期导出备份</b>。<span>上次备份：</span>${DB.settings.lastBackup ? fmtFull(DB.settings.lastBackup) : '<span class="neg">从未备份</span>'}</p>
       <div class="flex" style="flex-wrap:wrap">
@@ -1008,6 +1020,25 @@ function renderSettings(el) {
     }
   });
   el.querySelector('[data-cl-sync]')?.addEventListener('click', () => syncNow(true));
+  // 打印助手
+  el.querySelector('[data-pa-url]')?.addEventListener('change', e => {
+    DB.settings.printAgentUrl = e.target.value.trim() || 'http://127.0.0.1:17777';
+    save();
+  });
+  el.querySelector('[data-pa-test]')?.addEventListener('click', async e => {
+    const btn = e.currentTarget;
+    btn.disabled = true;
+    const base = (el.querySelector('[data-pa-url]').value.trim() || 'http://127.0.0.1:17777').replace(/\/$/, '');
+    try {
+      const res = await fetch(base + '/ping', { signal: AbortSignal.timeout(6000) });
+      const d = await res.json();
+      if (d.ok) toast(t('打印助手已连接：{files} 个 PDF / {pages} 页面单', { files: d.files, pages: d.pages }), 'success');
+      else toast(t('打印助手响应异常'), 'error');
+    } catch (err) {
+      toast(t('连不上打印助手，请确认打包电脑上 start.bat 正在运行'), 'error');
+    }
+    btn.disabled = false;
+  });
   el.querySelector('[data-cl-out]')?.addEventListener('click', async () => {
     await cloudLogout();
     render();
