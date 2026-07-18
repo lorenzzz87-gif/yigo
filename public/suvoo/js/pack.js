@@ -67,10 +67,12 @@ function handlePackScan(code) {
   focusPack();
 }
 
-// 空闲状态：这一枪是面单
+// 空闲状态：这一枪是面单（或商品条码 → 自动匹配待发订单）
 function handlePackWaybill(code) {
   const o = orderByCode(code);
   if (!o) {
+    const p = productByCode(code);
+    if (p) return handleProductEntry(p, code);
     packEvt('err', t('未找到该单号：{code}（订单可能未导入）', {code}));
     packLog(code, 'unknown');
     playBeep('err');
@@ -106,6 +108,56 @@ function handlePackWaybill(code) {
   packEvt('info', resume
     ? t('继续打包（此前已装 {done}/{total} 件），请扫商品条码', {done: tot.done, total: tot.total})
     : t('开始打包，共 {total} 件，请逐件扫商品条码装箱', {total: tot.total}));
+  playBeep('tick');
+}
+
+// 空闲时扫商品条码：匹配含该商品的待发订单（优先单商品行订单，最早优先）
+function handleProductEntry(p, code) {
+  const ks = normCode(p.sku), kb = normCode(p.barcode);
+  const matches = DB.orders.filter(o =>
+    o.status === 'pending' &&
+    packRequired(o).some(l => l.key === ks || (kb && l.key === kb)));
+  if (!matches.length) {
+    packEvt('warn', t('商品【{name}】没有待发订单', { name: p.name }));
+    packLog(code, 'unknown');
+    playBeep('dup');
+    return;
+  }
+  const singleLine = matches.filter(o => packRequired(o).length === 1);
+  const pool = singleLine.length ? singleLine : matches;
+  const target = pool.slice().sort((a2, b2) => (a2.createdAt || 0) - (b2.createdAt || 0))[0];
+  const notice = matches.length > 1 ? t('（该商品有 {n} 个待发订单，已按最早优先）', { n: matches.length }) : '';
+
+  const req = packRequired(target);
+  const total = req.reduce((sum, l) => sum + l.qty, 0);
+  // 单件订单：扫商品直接出库
+  if (total <= 1 && DB.settings.packSingleFast !== false) {
+    attachParcel(target);
+    rememberContents(target, 'fast');
+    verifyOrder(target);
+    packEvt('ok', t('扫商品匹配订单 {no}，已直接出库', { no: target.trackingNo || target.orderNo }) + notice);
+    packLog(code, 'fast', target.id);
+    playBeep('ok');
+    agentPrint(target.trackingNo);
+    return;
+  }
+  // 多件订单：打开装箱，并把手里这件计为已装 1 件
+  const resume = !!target.packing;
+  if (!target.packing) target.packing = { startedAt: Date.now(), packed: {}, updatedAt: Date.now() };
+  packState.currentOrderId = target.id;
+  if (!resume) agentPrint(target.trackingNo);
+  const line = req.find(l => l.key === ks || (kb && l.key === kb));
+  const done = packedCount(target, line.key);
+  if (done < line.qty) {
+    target.packing.packed[line.key] = done + 1;
+    target.packing.updatedAt = Date.now();
+    if (packIsComplete(target)) { completePack(target, false); return; }
+    save();
+    packEvt('ok', t('扫商品打开订单 {no}，已装 {name}（{n}/{qty}）', { no: target.trackingNo || target.orderNo, name: line.name, n: done + 1, qty: line.qty }) + notice);
+  } else {
+    save();
+    packEvt('info', t('已打开订单 {no}，请扫商品条码装箱', { no: target.trackingNo || target.orderNo }) + notice);
+  }
   playBeep('tick');
 }
 
@@ -311,7 +363,7 @@ function renderPack(el) {
             <input id="packInput" class="scan-input" placeholder="${cur ? '扫商品条码装箱…' : '扫描面单开始打包'}" autocomplete="off" spellcheck="false"></div>
           <p class="small muted mt-8">${cur
             ? '逐件扫商品条码 / SKU · 无条码商品点行内 +1 · 装齐自动完成出库'
-            : '扫运单号或订单号 · 单件订单直接出库 · 多件订单进入装箱核对'}</p>
+            : '扫面单 / 订单号 / 商品条码均可 · 单件直发 · 多件进入装箱核对'}</p>
           <div class="pk-dims">
             <span class="small dim">包裹尺寸/重量<span class="muted">（选填，出库时记入订单）</span></span>
             <input class="input" type="number" min="0" step="0.1" data-dim="l" placeholder="长 cm" value="${esc(d.l)}">
