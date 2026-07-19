@@ -230,13 +230,14 @@ function completePack(o, forced) {
 }
 
 /* ---------- Excel 导出 ---------- */
-function exportPackXLSX() {
-  const verified = DB.orders.filter(o => o.status === 'verified')
+function exportPackXLSX(days = 0) {
+  const cutoff = days > 0 ? Date.now() - days * 86400e3 : 0;
+  const verified = DB.orders.filter(o => o.status === 'verified' && (!cutoff || (o.verifiedAt || 0) >= cutoff))
     .sort((a, b) => (b.verifiedAt || 0) - (a.verifiedAt || 0));
   const pending = DB.orders.filter(o => o.status === 'pending')
     .sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
   const pv = (o, k) => (o.parcel && o.parcel[k] !== '' && o.parcel[k] != null) ? o.parcel[k] : '';
-  exportXLSX(`打包数据_${dayKey(Date.now())}.xlsx`, [
+  exportXLSX(`打包数据_${days > 0 ? '近' + days + '天_' : ''}${dayKey(Date.now())}.xlsx`, [
     {
       name: '打包出库',
       rows: [['出库时间', '渠道', '订单号', '运单号', '收件人', '商品明细', '件数', '长(cm)', '宽(cm)', '厚(cm)', '重量(kg)', '备注'],
@@ -350,7 +351,8 @@ function renderPack(el) {
 
   const d = packState.dims;
   el.innerHTML = pageHead('扫码打包台', '扫面单开包裹 → 逐件扫商品装箱 → 装齐自动出库；单件订单扫面单直发',
-    `<button class="btn" data-pk-xlsx>${icon('download', 15)}导出打包 Excel</button>`) + `
+    `<button class="btn" data-pk-xlsx3>${icon('download', 15)}导出近3天</button>
+     <button class="btn" data-pk-xlsx>${icon('download', 15)}导出全部 Excel</button>`) + `
     <div class="scan-chips mb-14">
       <span class="chip">待打包 <b>${pending.length}</b> 单</span>
       <span class="chip c-green">本次完成 <b>${doneCnt}</b></span>
@@ -430,7 +432,8 @@ function renderPack(el) {
   el.querySelectorAll('[data-dim]').forEach(inp => inp.addEventListener('input', () => {
     packState.dims[inp.dataset.dim] = inp.value;
   }));
-  el.querySelector('[data-pk-xlsx]').addEventListener('click', exportPackXLSX);
+  el.querySelector('[data-pk-xlsx]').addEventListener('click', () => exportPackXLSX(0));
+  el.querySelector('[data-pk-xlsx3]').addEventListener('click', () => exportPackXLSX(3));
   el.querySelector('[data-pk-clear]')?.addEventListener('click', () => {
     packState.session = [];
     packState.event = null;

@@ -136,7 +136,7 @@ const I18N = {
     '扫面单开包裹 → 逐件扫商品装箱 → 装齐自动出库；单件订单扫面单直发':
       'Scan label to open a box → scan each item → auto-ship when complete; single-item orders ship on label scan',
     '提示音': 'Sound', '待打包 {} 单': 'To pack: {}', '进行中': 'In progress',
-    '导出打包 Excel': 'Export packing Excel', '待打包': 'To pack', '本次完成': 'Done',
+    '导出打包 Excel': 'Export packing Excel', '导出近3天': 'Export last 3 days', '导出全部 Excel': 'Export all (Excel)', '待打包': 'To pack', '本次完成': 'Done',
     '扫描面单开始打包': 'Scan a label to start packing',
     '扫运单号或订单号 · 单件订单直接出库 · 多件订单进入装箱核对':
       'Scan tracking/order no. · single-item ships directly · multi-item enters pack check',
@@ -336,7 +336,7 @@ const I18N = {
     '扫面单开包裹 → 逐件扫商品装箱 → 装齐自动出库；单件订单扫面单直发':
       'Scansiona etichetta → scansiona ogni articolo → spedizione automatica; ordini singoli spediti alla scansione',
     '提示音': 'Suono', '待打包 {} 单': 'Da imballare: {}', '进行中': 'In corso',
-    '导出打包 Excel': 'Esporta Excel', '待打包': 'Da imballare', '本次完成': 'Completati',
+    '导出打包 Excel': 'Esporta Excel', '导出近3天': 'Ultimi 3 giorni', '导出全部 Excel': 'Esporta tutto (Excel)', '待打包': 'Da imballare', '本次完成': 'Completati',
     '扫描面单开始打包': 'Scansiona un\'etichetta per iniziare',
     '扫运单号或订单号 · 单件订单直接出库 · 多件订单进入装箱核对':
       'Scansiona spedizione/ordine · articolo singolo spedito · multi-articolo entra in verifica',
