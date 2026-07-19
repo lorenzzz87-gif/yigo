@@ -1,8 +1,11 @@
 /* ============================================================
-   SUVOO 进销存 — 扫描核对台
+   SUVOO 进销存 — 物流分拣台
+   场景：多家物流公司揽收时，选定「当前交接给」的物流公司，
+   逐件扫包裹面单核对归属——A 物流的包裹绝不交给 B/C（串包报警）。
+   纯核对，不改订单状态；交接记录可导出 Excel。
    ============================================================ */
 
-/* ---------- 提示音 ---------- */
+/* ---------- 提示音（全站共用） ---------- */
 let _actx = null;
 function playBeep(kind) {
   if (!DB.settings.beep) return;
@@ -27,215 +30,182 @@ function playBeep(kind) {
   } catch (e) { /* 无音频环境时忽略 */ }
 }
 
-const scanState = {
-  session: [], // {at, code, result:'ok'|'dup'|'err'|'undone', orderId}
-  last: null   // {res, code, orderId, at}
+const sortState = {
+  carrier: '',   // 当前交接给哪家物流
+  session: [],   // {at, code, orderId, oc(所属物流), sel(交接给), result:'ok'|'wrong'|'err'|'dup'|'nocarrier'}
+  last: null
 };
 
-function focusScan() {
-  const i = document.getElementById('scanInput');
+function knownCarriers() {
+  return [...new Set(DB.orders.map(o => (o.carrier || '').trim()).filter(Boolean))];
+}
+
+function focusSort() {
+  const i = document.getElementById('sortInput');
   if (i) { i.value = ''; i.focus(); }
 }
 
-function handleScan(code) {
+function handleSortScan(code) {
   code = String(code || '').trim();
   if (!code) return;
+  if (!sortState.carrier) {
+    sortState.last = { res: 'nosel', code };
+    playBeep('dup');
+    render(); focusSort();
+    return;
+  }
   const o = orderByCode(code);
-  let res;
-  if (o && o.status === 'pending') { verifyOrder(o); res = 'ok'; }
-  else if (o) res = 'dup';
-  else res = 'err';
-  playBeep(res);
-  scanState.session.unshift({ at: Date.now(), code, result: res, orderId: o ? o.id : null });
-  if (scanState.session.length > 500) scanState.session.length = 500;
-  scanState.last = { res, code, orderId: o ? o.id : null, at: Date.now() };
+  let res, oc = '';
+  if (!o) {
+    res = 'err';
+  } else {
+    oc = (o.carrier || '').trim();
+    const dupInSession = sortState.session.some(x => x.orderId === o.id && x.result === 'ok');
+    if (dupInSession) res = 'dup';
+    else if (!oc) res = 'nocarrier';
+    else if (normCode(oc) === normCode(sortState.carrier)) res = 'ok';
+    else res = 'wrong';
+  }
+  playBeep(res === 'ok' ? 'ok' : (res === 'dup' || res === 'nocarrier') ? 'dup' : 'err');
+  sortState.session.unshift({ at: Date.now(), code, orderId: o ? o.id : null, oc, sel: sortState.carrier, result: res });
+  if (sortState.session.length > 800) sortState.session.length = 800;
+  sortState.last = { res, code, orderId: o ? o.id : null, oc };
   render();
-  focusScan();
+  focusSort();
 }
 
-function scanItemsHTML(o) {
-  const items = o.items || [];
-  if (!items.length) return '<div class="res-items"><span class="muted small">该订单无商品明细（不扣库存）</span></div>';
-  return `<div class="res-items">${items.map(i => {
-    const p = productByCode(i.sku);
-    return `<div class="ri">
-      <span>${esc(i.name || i.sku)} <span class="mono muted">${esc(i.sku || '')}</span>
-        ${!p ? '<span class="badge b-red">未匹配商品库</span>' : ''}</span>
-      <span>×<b>${i.qty}</b>${p ? ` <span class="muted small">现库存 ${Number(p.stock)}</span>` : ''}</span>
-    </div>`;
-  }).join('')}</div>`;
-}
-
-function scanResultHTML() {
-  const L = scanState.last;
-  if (!L) return `<div class="res-idle">${icon('scan', 32)}<span>等待扫描…</span></div>`;
+function sortResultHTML() {
+  const L = sortState.last;
+  if (!L) return `<div class="scan-result"><div class="res-idle">${icon('truck', 32)}<span>等待扫描包裹面单…</span></div></div>`;
   const o = L.orderId ? DB.orders.find(x => x.id === L.orderId) : null;
-  if (L.res === 'ok' && o) {
-    return `
-      <div class="res-head">${icon('check', 22)}核对成功，已出库</div>
-      <div class="res-meta">
-        <span>${channelBadge(o.channel)}</span>
-        ${o.orderNo ? `<span>订单 <b class="mono">${esc(o.orderNo)}</b></span>` : ''}
-        <span>运单 <b class="mono">${esc(o.trackingNo || L.code)}</b></span>
-        ${o.receiver ? `<span>收件 <b>${esc(o.receiver)}</b></span>` : ''}
-      </div>
-      ${scanItemsHTML(o)}
-      <div class="res-actions"><button class="btn btn-sm" data-undo>${icon('undo', 13)}撤销本次核对</button></div>`;
+  const trackLine = `<div class="res-meta"><span>运单 <b class="mono">${esc(o ? (o.trackingNo || L.code) : L.code)}</b></span>
+    ${o ? `<span>${channelBadge(o.channel)}</span>` : ''}</div>`;
+  if (L.res === 'nosel') {
+    return `<div class="scan-result res-dup">
+      <div class="res-head">${icon('alert', 22)}请先选择当前交接的物流公司</div></div>`;
   }
-  if (L.res === 'dup' && o) {
-    return `
-      <div class="res-head">${icon('alert', 22)}重复扫描！</div>
-      <div class="res-meta">
-        <span>该单已于 <b>${fmtDT(o.verifiedAt)}</b> 核对过，请检查是否重复打单</span>
-      </div>
-      <div class="res-meta">
-        <span>${channelBadge(o.channel)}</span>
-        ${o.orderNo ? `<span>订单 <b class="mono">${esc(o.orderNo)}</b></span>` : ''}
-        <span>运单 <b class="mono">${esc(o.trackingNo || L.code)}</b></span>
-      </div>
-      ${scanItemsHTML(o)}`;
+  if (L.res === 'ok') {
+    return `<div class="scan-result res-ok">
+      <div class="res-head">${icon('check', 22)}归属正确，可交接</div>
+      <div style="font-size:34px;font-weight:800;color:#047857;margin:6px 0 10px">${esc(L.oc)} ✓</div>
+      ${trackLine}
+      ${o && o.status === 'pending' ? `<p class="small" style="color:var(--warn)"><b>注意：该订单尚未打包出库</b></p>` : ''}
+    </div>`;
   }
-  return `
+  if (L.res === 'wrong') {
+    return `<div class="scan-result res-err">
+      <div class="res-head">${icon('x', 22)}${esc(t('串包警报！不要交给 {sel}', { sel: sortState.carrier }))}</div>
+      <div style="font-size:34px;font-weight:800;color:#B91C1C;margin:6px 0 10px">${esc(t('{oc} 的包裹', { oc: L.oc }))}</div>
+      <p class="small dim">${esc(t('该包裹属于【{oc}】，请取出放回对应区域。', { oc: L.oc }))}</p>
+      ${trackLine}
+    </div>`;
+  }
+  if (L.res === 'dup') {
+    return `<div class="scan-result res-dup">
+      <div class="res-head">${icon('alert', 22)}该包裹本次已扫过</div>
+      ${trackLine}
+    </div>`;
+  }
+  if (L.res === 'nocarrier') {
+    return `<div class="scan-result res-dup">
+      <div class="res-head">${icon('alert', 22)}该订单未指定物流公司</div>
+      <p class="small dim">导入订单时映射「物流公司」列，或在订单编辑中补填。</p>
+      ${trackLine}
+    </div>`;
+  }
+  return `<div class="scan-result res-err">
     <div class="res-head">${icon('x', 22)}未找到该单号</div>
     <div class="res-meta"><span>扫描内容：<b class="mono">${esc(L.code)}</b></span></div>
-    <p class="small dim">订单列表中没有匹配的运单号或订单号。可能：订单还未导入 / 单号录入有误 / 属于其他渠道。</p>
-    <div class="res-actions">
-      <button class="btn btn-sm btn-primary" data-register>${icon('plus', 13)}快速登记此订单</button>
-      <button class="btn btn-sm btn-ghost" data-ignore>忽略</button>
-    </div>`;
+  </div>`;
 }
 
-/* ---------- Excel 导出：面单核对表 ---------- */
-function exportVerifyXLSX() {
-  const verified = DB.orders.filter(o => o.status === 'verified')
-    .sort((a, b) => (b.verifiedAt || 0) - (a.verifiedAt || 0));
-  const pending = DB.orders.filter(o => o.status === 'pending')
-    .sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
-  exportXLSX(`面单核对_${dayKey(Date.now())}.xlsx`, [
-    {
-      name: '已核对',
-      rows: [['核对时间', '渠道', '订单号', '运单号', '收件人', '商品明细', '件数', '备注'],
-        ...verified.map(o => [fmtFull(o.verifiedAt), o.channel || '', o.orderNo || '', o.trackingNo || '',
-          o.receiver || '', orderItemsSummary(o), orderPieces(o), o.note || ''])]
-    },
-    {
-      name: '待核对',
-      rows: [['创建时间', '渠道', '订单号', '运单号', '收件人', '商品明细', '件数', '备注'],
-        ...pending.map(o => [fmtFull(o.createdAt), o.channel || '', o.orderNo || '', o.trackingNo || '',
-          o.receiver || '', orderItemsSummary(o), orderPieces(o), o.note || ''])]
-    }
-  ]);
+const SORT_RESULT_LABEL = {
+  ok: '<span class="scan-log-result sl-ok">✓ 正确</span>',
+  wrong: '<span class="scan-log-result sl-err">串包</span>',
+  err: '<span class="scan-log-result sl-err">未找到</span>',
+  dup: '<span class="scan-log-result sl-dup">重复</span>',
+  nocarrier: '<span class="scan-log-result sl-dup">未指定</span>'
+};
+
+/* ---------- 交接记录导出 ---------- */
+function exportSortXLSX() {
+  const rows = [['时间', '运单号', '所属物流', '交接给', '结果'],
+    ...sortState.session.slice().reverse().map(x => [fmtFull(x.at), x.code, x.oc || '',
+      x.sel, { ok: '正确', wrong: '串包', err: '未找到', dup: '重复', nocarrier: '未指定物流' }[x.result] || x.result])];
+  exportXLSX(`物流交接_${dayKey(Date.now())}.xlsx`, [{ name: '交接记录', rows }]);
 }
 
-function renderScan(el) {
-  const pendingList = DB.orders.filter(o => o.status === 'pending');
-  const todayVerified = DB.orders.filter(o => o.status === 'verified' && isToday(o.verifiedAt)).length;
-  const s = scanState.session;
+function renderSort(el) {
+  const carriers = knownCarriers();
+  const s = sortState.session;
   const cnt = {
     ok: s.filter(x => x.result === 'ok').length,
-    dup: s.filter(x => x.result === 'dup').length,
-    err: s.filter(x => x.result === 'err').length
+    wrong: s.filter(x => x.result === 'wrong').length,
+    err: s.filter(x => x.result === 'err' || x.result === 'nocarrier').length
   };
-  const L = scanState.last;
-  const resCls = L ? ('res-' + L.res) : '';
 
-  el.innerHTML = pageHead('扫描核对台', '扫描枪对准面单条码，回车自动核对出库',
-    `<button class="btn" data-sc-xlsx>${icon('download', 15)}导出核对 Excel</button>`) + `
+  el.innerHTML = pageHead('物流分拣台', '选定交接的物流公司，逐件扫包裹面单核对归属，防止串包',
+    s.length ? `<button class="btn" data-so-xlsx>${icon('download', 15)}导出交接 Excel</button>` : '') + `
     <div class="scan-chips mb-14">
-      <span class="chip">待核对 <b>${pendingList.length}</b> 单</span>
-      <span class="chip c-green">今日已核对 <b>${todayVerified}</b></span>
-      <span class="chip c-green">本次成功 <b>${cnt.ok}</b></span>
-      <span class="chip c-amber">重复 <b>${cnt.dup}</b></span>
-      <span class="chip c-red">异常 <b>${cnt.err}</b></span>
-      <label class="checkbox-line" style="margin-left:auto"><input type="checkbox" data-beep ${DB.settings.beep ? 'checked' : ''}>提示音</label>
+      <span class="chip c-green">正确 <b>${cnt.ok}</b></span>
+      <span class="chip c-red">串包 <b>${cnt.wrong}</b></span>
+      <span class="chip c-amber">异常 <b>${cnt.err}</b></span>
+      <label class="checkbox-line" style="margin-left:auto"><input type="checkbox" data-so-beep ${DB.settings.beep ? 'checked' : ''}>提示音</label>
     </div>
     <div class="scan-grid">
       <div>
         <div class="card">
+          <div class="card-title">${icon('truck', 16)}当前交接给</div>
+          ${carriers.length ? `<div class="flex mb-14" style="flex-wrap:wrap">
+            ${carriers.map(c => `<button class="btn ${sortState.carrier === c ? 'btn-accent' : ''}" data-so-carrier="${esc(c)}">${esc(c)}</button>`).join('')}
+          </div>` : `<p class="small dim mb-14">订单数据里还没有物流公司，导入订单时请映射「物流公司」列。</p>`}
           <div class="scan-input-wrap">${icon('scan', 22)}
-            <input id="scanInput" class="scan-input" placeholder="扫描或输入运单号 / 订单号" autocomplete="off" spellcheck="false"></div>
-          <p class="small muted mt-8">支持运单号或订单号 · 扫码自动确认（无需回车） · 手动输入按 <span class="kbd">Enter</span> · 点击页面空白处自动回到输入框</p>
-          <div id="scanResult" class="scan-result ${resCls}">${scanResultHTML()}</div>
-        </div>
-        <div class="card mt-14">
-          <div class="card-title">${icon('orders', 16)}待核对列表<span class="spacer"></span>
-            <button class="btn btn-sm btn-ghost" onclick="location.hash='#/orders'">全部订单</button></div>
-          ${pendingList.length ? `<div class="tbl-wrap"><table class="tbl"><thead>
-            <tr><th>渠道</th><th>运单号</th><th>商品</th><th class="num">件数</th></tr></thead><tbody>
-            ${pendingList.slice(0, 10).map(o => `<tr>
-              <td>${channelBadge(o.channel)}</td>
-              <td class="mono">${esc(o.trackingNo || o.orderNo || '')}</td>
-              <td class="ellip">${esc(orderItemsSummary(o))}</td>
-              <td class="num">${orderPieces(o)}</td></tr>`).join('')}
-          </tbody></table></div>
-          ${pendingList.length > 10 ? `<p class="small muted mt-8">仅显示前 10 单，共 ${pendingList.length} 单待核对</p>` : ''}`
-          : `<p class="muted small">全部订单已核对完毕 ✓</p>`}
+            <input id="sortInput" class="scan-input" placeholder="扫描包裹面单运单号" autocomplete="off" spellcheck="false" ${sortState.carrier ? '' : 'disabled'}></div>
+          <p class="small muted mt-8">扫码自动确认（无需回车） · 归属正确绿灯放行，串包红灯报警</p>
+          ${sortResultHTML()}
         </div>
       </div>
       <div class="card">
-        <div class="card-title">${icon('history', 16)}本次扫描记录<span class="spacer"></span>
-          ${s.length ? `<button class="btn btn-sm btn-ghost" data-clear-log>清空</button>` : ''}</div>
+        <div class="card-title">${icon('history', 16)}本次交接记录<span class="spacer"></span>
+          ${s.length ? `<button class="btn btn-sm btn-ghost" data-so-clear>清空</button>` : ''}</div>
         ${s.length ? `<div class="tbl-wrap"><table class="tbl"><thead>
-          <tr><th>时间</th><th>单号</th><th>结果</th></tr></thead><tbody>
-          ${s.slice(0, 50).map(x => {
-            const o = x.orderId ? DB.orders.find(y => y.id === x.orderId) : null;
-            const lbl = x.result === 'ok' ? '<span class="scan-log-result sl-ok">✓ 核对</span>'
-              : x.result === 'dup' ? '<span class="scan-log-result sl-dup">重复</span>'
-              : x.result === 'undone' ? '<span class="muted">已撤销</span>'
-              : '<span class="scan-log-result sl-err">未找到</span>';
-            return `<tr><td class="muted small">${fmtDT(x.at).slice(6)}</td>
-              <td class="mono">${esc(x.code)}${o && o.channel ? ` <span class="muted small">${esc(o.channel)}</span>` : ''}</td>
-              <td>${lbl}</td></tr>`;
-          }).join('')}
-        </tbody></table></div>` : `<p class="muted small" style="padding:12px 0">还没有扫描记录。将光标放在左侧输入框，直接用扫描枪扫面单即可。</p>`}
+          <tr><th>时间</th><th>运单号</th><th>所属物流</th><th>结果</th></tr></thead><tbody>
+          ${s.slice(0, 50).map(x => `<tr>
+            <td class="muted small">${fmtDT(x.at).slice(6)}</td>
+            <td class="mono">${esc(x.code)}</td>
+            <td>${esc(x.oc || '—')}</td>
+            <td>${SORT_RESULT_LABEL[x.result] || esc(x.result)}</td></tr>`).join('')}
+        </tbody></table></div>` : `<p class="muted small" style="padding:12px 0">先在左侧选择物流公司，然后逐件扫包裹面单即可。</p>`}
       </div>
     </div>`;
 
-  const input = el.querySelector('#scanInput');
+  el.querySelectorAll('[data-so-carrier]').forEach(b => b.addEventListener('click', () => {
+    sortState.carrier = b.dataset.soCarrier;
+    sortState.last = null;
+    render();
+    focusSort();
+  }));
+
+  const input = el.querySelector('#sortInput');
   input.addEventListener('keydown', e => {
-    if (e.key === 'Enter' && !e.isComposing) { e.preventDefault(); handleScan(input.value); }
+    if (e.key === 'Enter' && !e.isComposing) { e.preventDefault(); handleSortScan(input.value); }
   });
-  attachAutoScan(input, code => handleScan(code));
-  setTimeout(() => input.focus(), 30);
+  attachAutoScan(input, code => handleSortScan(code));
+  if (sortState.carrier) setTimeout(() => input.focus(), 30);
 
-  el.querySelector('[data-beep]').addEventListener('change', e => {
-    DB.settings.beep = e.target.checked;
-    save();
-  });
-  el.querySelector('[data-sc-xlsx]').addEventListener('click', exportVerifyXLSX);
-  el.querySelector('[data-clear-log]')?.addEventListener('click', () => {
-    scanState.session = [];
-    scanState.last = null;
+  el.querySelector('[data-so-beep]').addEventListener('change', e => { DB.settings.beep = e.target.checked; save(); });
+  el.querySelector('[data-so-clear]')?.addEventListener('click', () => {
+    sortState.session = [];
+    sortState.last = null;
     render();
   });
-  el.querySelector('[data-undo]')?.addEventListener('click', () => {
-    const L2 = scanState.last;
-    const o = L2 && DB.orders.find(x => x.id === L2.orderId);
-    if (o) {
-      unverifyOrder(o);
-      const entry = scanState.session.find(x => x.orderId === o.id && x.result === 'ok');
-      if (entry) entry.result = 'undone';
-      scanState.last = null;
-      toast('已撤销核对，库存已回补');
-      render();
-      focusScan();
-    }
-  });
-  el.querySelector('[data-register]')?.addEventListener('click', () => {
-    openOrderModal(null, { trackingNo: scanState.last?.code || '' });
-  });
-  el.querySelector('[data-ignore]')?.addEventListener('click', () => {
-    scanState.last = null;
-    render();
-    focusScan();
-  });
+  el.querySelector('[data-so-xlsx]')?.addEventListener('click', exportSortXLSX);
 
-  // 点击空白处自动回焦到扫描框（不干扰按钮 / 输入框 / 弹窗）
-  function focusGuard(e) {
+  function sortFocusGuard(e) {
     if (document.querySelector('#modalRoot .modal-overlay')) return;
     if (e.target.closest('input, textarea, select, button, a, label, .picker-list')) return;
-    setTimeout(focusScan, 0);
+    setTimeout(focusSort, 0);
   }
-  document.addEventListener('mousedown', focusGuard);
-  window._pageCleanup = () => document.removeEventListener('mousedown', focusGuard);
+  document.addEventListener('mousedown', sortFocusGuard);
+  window._pageCleanup = () => document.removeEventListener('mousedown', sortFocusGuard);
 }

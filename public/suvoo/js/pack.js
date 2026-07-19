@@ -86,12 +86,13 @@ function handlePackWaybill(code) {
   }
   const req = packRequired(o);
   const total = req.reduce((s, l) => s + l.qty, 0);
-  // 智能混合：单件订单（或无明细订单）扫面单直接出库
-  if (!req.length || (total <= 1 && DB.settings.packSingleFast !== false)) {
+  // 智能混合：单件订单直发；「逐件核对」关闭时多件订单也直发
+  if (!req.length || DB.settings.packVerifyItems === false ||
+      (total <= 1 && DB.settings.packSingleFast !== false)) {
     attachParcel(o);
     rememberContents(o, 'fast');
     verifyOrder(o);
-    packEvt('ok', t('单件订单，已直接完成出库：{no}', {no: o.trackingNo || o.orderNo}));
+    packEvt('ok', t(total <= 1 ? '单件订单，已直接完成出库：{no}' : '已直接完成出库：{no}', {no: o.trackingNo || o.orderNo}));
     packLog(code, 'fast', o.id);
     playBeep('ok');
     agentPrint(o.trackingNo);
@@ -130,8 +131,9 @@ function handleProductEntry(p, code) {
 
   const req = packRequired(target);
   const total = req.reduce((sum, l) => sum + l.qty, 0);
-  // 单件订单：扫商品直接出库
-  if (total <= 1 && DB.settings.packSingleFast !== false) {
+  // 单件订单（或关闭逐件核对时）：扫商品直接出库
+  if (DB.settings.packVerifyItems === false ||
+      (total <= 1 && DB.settings.packSingleFast !== false)) {
     attachParcel(target);
     rememberContents(target, 'fast');
     verifyOrder(target);

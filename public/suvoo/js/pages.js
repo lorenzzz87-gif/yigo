@@ -48,13 +48,13 @@ function renderDashboard(el) {
   }
 
   el.innerHTML = pageHead('概览', '今天是 ' + dayKey(Date.now()),
-    `<button class="btn btn-accent" onclick="location.hash='#/scan'">${icon('scan', 16)}去扫描核对</button>`) + `
+    `<button class="btn btn-accent" onclick="location.hash='#/pack'">${icon('pack', 16)}去扫码打包</button>`) + `
     <div class="grid grid-stats">
       <div class="stat" onclick="location.hash='#/orders'">
         <div class="stat-ico amber">${icon('orders', 21)}</div>
         <div><div class="stat-num">${pending.length}</div><div class="stat-lbl">待核对订单</div></div>
       </div>
-      <div class="stat" onclick="location.hash='#/scan'">
+      <div class="stat" onclick="location.hash='#/pack'">
         <div class="stat-ico green">${icon('check', 21)}</div>
         <div><div class="stat-num">${todayVerified.length}</div><div class="stat-lbl">今日已核对</div></div>
       </div>
@@ -621,6 +621,7 @@ function renderOrders(el) {
               ${p ? `<span class="muted">（当前库存 ${Number(p.stock)}）</span>`
                   : `<span class="badge b-red" style="margin-left:6px">未匹配商品库</span>`}</div>`;
           }).join('')}</div>` : '<span class="muted small">无商品明细</span>'}
+        ${o.carrier ? `<div class="small muted mt-8"><span>物流：</span>${esc(o.carrier)}</div>` : ''}
         ${o.receiver ? `<div class="small muted mt-8"><span>收件人：</span>${esc(o.receiver)}</div>` : ''}
         ${o.parcel ? `<div class="small muted"><span>包裹：</span>${[o.parcel.l, o.parcel.w, o.parcel.h].map(v => v === '' || v == null ? '?' : v).join('×')} cm${o.parcel.kg !== '' && o.parcel.kg != null ? ` · ${o.parcel.kg} kg` : ''}</div>` : ''}
         ${o.note ? `<div class="small muted"><span>备注：</span>${esc(o.note)}</div>` : ''}
@@ -706,7 +707,9 @@ function openOrderModal(o = null, prefill = {}) {
         <div class="field"><label>运单号（扫描核对依据）</label>
           <input class="input mono" data-f="trackingNo" value="${esc(o?.trackingNo || prefill.trackingNo || '')}"></div>
       </div>
-      <div class="form-row">
+      <div class="form-row-3">
+        <div class="field"><label>物流公司（分拣核对用）</label>
+          <input class="input" data-f="carrier" value="${esc(o?.carrier || '')}" placeholder="如 GLS / BRT / SDA"></div>
         <div class="field"><label>收件人 / 客户</label>
           <input class="input" data-f="receiver" value="${esc(o?.receiver || '')}"></div>
         <div class="field"><label>备注</label>
@@ -760,7 +763,7 @@ function openOrderModal(o = null, prefill = {}) {
         const p = it.sku ? productByCode(it.sku) : productByCode(it.name);
         return { sku: p ? p.sku : (it.sku || it.name), name: p ? p.name : (it.name || it.sku), qty: Math.max(1, Number(it.qty) || 1) };
       });
-    const data = { channel: get('channel'), orderNo, trackingNo, receiver: get('receiver'), note: get('note'), items: cleanItems };
+    const data = { channel: get('channel'), orderNo, trackingNo, carrier: get('carrier'), receiver: get('receiver'), note: get('note'), items: cleanItems };
     if (isEdit) Object.assign(o, data);
     else DB.orders.unshift({ id: uid(), carrier: '', status: 'pending', createdAt: Date.now(), verifiedAt: null, ...data });
     save(); m.close();
@@ -789,14 +792,14 @@ function openOrderImport() {
       { key: 'trackingNo', label: '运单号 ★' }, { key: 'orderNo', label: '订单号' },
       { key: 'channel', label: '渠道' }, { key: 'sku', label: 'SKU' },
       { key: 'name', label: '商品名' }, { key: 'qty', label: '数量' },
-      { key: 'receiver', label: '收件人' }, { key: 'carrier', label: '快递公司' },
+      { key: 'receiver', label: '收件人' }, { key: 'carrier', label: '物流公司' },
       { key: 'note', label: '备注' }
     ],
     guessList: ORDER_GUESS,
     templateName: '订单导入模板.csv',
-    templateRows: [['渠道', '订单号', '运单号', 'SKU', '商品名', '数量', '收件人', '备注'],
-      ['淘宝', 'TB001', 'SF1234567890', 'BX-001', '密封保鲜盒三件套', '2', '王女士', ''],
-      ['淘宝', 'TB001', 'SF1234567890', 'LJ-030', '加厚垃圾袋', '1', '王女士', '同单第二个商品写同一运单号']],
+    templateRows: [['渠道', '订单号', '运单号', '物流公司', 'SKU', '商品名', '数量', '收件人', '备注'],
+      ['淘宝', 'TB001', 'SF1234567890', 'GLS', 'BX-001', '密封保鲜盒三件套', '2', '王女士', ''],
+      ['淘宝', 'TB001', 'SF1234567890', 'GLS', 'LJ-030', '加厚垃圾袋', '1', '王女士', '同单第二个商品写同一运单号']],
     extraHTML: `<div class="form-row">
       <div class="field"><label>默认渠道（表中无渠道列时使用）</label>
         <select class="select" data-def-chan>${DB.channels.map(c => `<option>${esc(c)}</option>`).join('')}</select></div>
@@ -965,6 +968,10 @@ function renderSettings(el) {
       <div class="setting-line">
         <div class="sl-txt"><b>核对时自动扣减库存</b><span>扫描核对订单时按商品明细自动出库；撤销核对自动回补</span></div>
         <label class="checkbox-line"><input type="checkbox" data-set="deduct" ${DB.settings.deduct ? 'checked' : ''}>开启</label>
+      </div>
+      <div class="setting-line">
+        <div class="sl-txt"><b>多件订单逐件核对</b><span>关闭后，多件订单扫面单也直接出库（不逐件扫商品，等同旧「扫描核对」）</span></div>
+        <label class="checkbox-line"><input type="checkbox" data-set="packVerifyItems" ${DB.settings.packVerifyItems !== false ? 'checked' : ''}>开启</label>
       </div>
       <div class="setting-line">
         <div class="sl-txt"><b>单件订单扫面单直发</b><span>扫码打包页：只有 1 件商品的订单扫面单直接出库，无需再扫商品</span></div>

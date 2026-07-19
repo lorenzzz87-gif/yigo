@@ -12,7 +12,7 @@ function defaultDB() {
                     //  items:[{sku,name,qty}], status:'pending'|'verified', createdAt, verifiedAt}
     moves: [],      // {id, at, type:'in'|'out'|'adjust', sku, name, qty(signed), reason, ref, note}
     channels: ['淘宝', '拼多多', '抖音', '微信', 'Shopify', '其他'],
-    settings: { beep: true, deduct: true, packSingleFast: true, printAgent: false, printAgentUrl: 'http://127.0.0.1:17777', lastBackup: null }
+    settings: { beep: true, deduct: true, packSingleFast: true, packVerifyItems: true, printAgent: false, printAgentUrl: 'http://127.0.0.1:17777', lastBackup: null }
   };
 }
 
@@ -316,6 +316,10 @@ function loadDemoData() {
     O('淘宝', 'TB2607100009', 'SF1390227765001', [{ sku: 'BX-001', name: '密封保鲜盒三件套', qty: 1 }], '孙女士', 26, true),
     O('抖音', 'DY99001100', 'ZT0099887766001', [{ sku: 'TX-201', name: '居家棉拖鞋', qty: 1 }], '吴先生', 27, true)
   ];
+  // 演示：按运单前缀分配物流公司（分拣台演示用）
+  for (const o of DB.orders) {
+    o.carrier = o.trackingNo.startsWith('SF') ? 'GLS' : o.trackingNo.startsWith('YT') ? 'BRT' : 'SDA';
+  }
   DB.moves = [
     { id: uid(), at: now - 26 * 3600e3, type: 'out', sku: 'BX-001', name: '密封保鲜盒三件套', qty: -1, reason: '订单核对出库', ref: 'SF1390227765001', note: '' },
     { id: uid(), at: now - 27 * 3600e3, type: 'out', sku: 'TX-201', name: '居家棉拖鞋', qty: -1, reason: '订单核对出库', ref: 'ZT0099887766001', note: '' },
