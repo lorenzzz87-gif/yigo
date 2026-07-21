@@ -66,6 +66,12 @@ function handleSortScan(code) {
     else if (normCode(oc) === normCode(sortState.carrier)) res = 'ok';
     else res = 'wrong';
   }
+  // 归属正确 → 把交接时间和交给的物流公司持久化记到订单（随云同步保存）
+  if (res === 'ok' && o) {
+    o.sortedAt = Date.now();
+    o.sortedCarrier = sortState.carrier;
+    save();
+  }
   playBeep(res === 'ok' ? 'ok' : (res === 'dup' || res === 'nocarrier') ? 'dup' : 'err');
   sortState.session.unshift({ at: Date.now(), code, orderId: o ? o.id : null, oc, sel: sortState.carrier, result: res });
   if (sortState.session.length > 800) sortState.session.length = 800;

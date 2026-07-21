@@ -622,6 +622,7 @@ function renderOrders(el) {
                   : `<span class="badge b-red" style="margin-left:6px">未匹配商品库</span>`}</div>`;
           }).join('')}</div>` : '<span class="muted small">无商品明细</span>'}
         ${o.carrier ? `<div class="small muted mt-8"><span>物流：</span>${esc(o.carrier)}</div>` : ''}
+        ${o.sortedAt ? `<div class="small muted"><span>已交接：</span>${esc(o.sortedCarrier || o.carrier || '')} · ${fmtDT(o.sortedAt)}</div>` : ''}
         ${o.receiver ? `<div class="small muted mt-8"><span>收件人：</span>${esc(o.receiver)}</div>` : ''}
         ${o.parcel ? `<div class="small muted"><span>包裹：</span>${[o.parcel.l, o.parcel.w, o.parcel.h].map(v => v === '' || v == null ? '?' : v).join('×')} cm${o.parcel.kg !== '' && o.parcel.kg != null ? ` · ${o.parcel.kg} kg` : ''}</div>` : ''}
         ${o.note ? `<div class="small muted"><span>备注：</span>${esc(o.note)}</div>` : ''}

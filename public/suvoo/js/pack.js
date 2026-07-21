@@ -246,8 +246,8 @@ function exportPackXLSX(days = 0) {
   exportXLSX(`打包数据_${days > 0 ? '近' + days + '天_' : ''}${dayKey(Date.now())}.xlsx`, [
     {
       name: '打包出库',
-      rows: [['刷单时间', '出库时间', '渠道', '订单号', '运单号', '收件人', '商品明细', '件数', '长(cm)', '宽(cm)', '厚(cm)', '重量(kg)', '备注'],
-        ...verified.map(o => [fmtFull(o.scanAt || o.verifiedAt), fmtFull(o.verifiedAt), o.channel || '', o.orderNo || '', o.trackingNo || '',
+      rows: [['刷单时间', '出库时间', '交接时间', '交接物流', '渠道', '订单号', '运单号', '收件人', '商品明细', '件数', '长(cm)', '宽(cm)', '厚(cm)', '重量(kg)', '备注'],
+        ...verified.map(o => [fmtFull(o.scanAt || o.verifiedAt), fmtFull(o.verifiedAt), fmtFull(o.sortedAt), o.sortedCarrier || o.carrier || '', o.channel || '', o.orderNo || '', o.trackingNo || '',
           o.receiver || '', orderItemsSummary(o), orderPieces(o),
           pv(o, 'l'), pv(o, 'w'), pv(o, 'h'), pv(o, 'kg'), o.note || ''])]
     },
