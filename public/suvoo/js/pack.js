@@ -17,6 +17,9 @@ function rememberContents(o, kind) {
   packState.lastContents = { kind, no: o.trackingNo || o.orderNo || '', items: packRequired(o) };
 }
 
+// 记录「刷单时间」：打包工位首次扫到该单开始处理的时刻（随订单同步上云）
+function markScan(o) { if (o && !o.scanAt) o.scanAt = Date.now(); }
+
 /* ---------- 面单打印助手（本工位局域打印，见 print-agent/安装说明） ---------- */
 async function agentPrint(no) {
   if (DB.settings.printAgent !== true || !no) return;
@@ -89,6 +92,7 @@ function handlePackWaybill(code) {
   // 智能混合：单件订单直发；「逐件核对」关闭时多件订单也直发
   if (!req.length || DB.settings.packVerifyItems === false ||
       (total <= 1 && DB.settings.packSingleFast !== false)) {
+    markScan(o);
     attachParcel(o);
     rememberContents(o, 'fast');
     verifyOrder(o);
@@ -100,6 +104,7 @@ function handlePackWaybill(code) {
   }
   const resume = !!o.packing;
   if (!o.packing) {
+    markScan(o);
     o.packing = { startedAt: Date.now(), packed: {}, updatedAt: Date.now() };
     save();
   }
@@ -134,6 +139,7 @@ function handleProductEntry(p, code) {
   // 单件订单（或关闭逐件核对时）：扫商品直接出库
   if (DB.settings.packVerifyItems === false ||
       (total <= 1 && DB.settings.packSingleFast !== false)) {
+    markScan(target);
     attachParcel(target);
     rememberContents(target, 'fast');
     verifyOrder(target);
@@ -145,7 +151,7 @@ function handleProductEntry(p, code) {
   }
   // 多件订单：打开装箱，并把手里这件计为已装 1 件
   const resume = !!target.packing;
-  if (!target.packing) target.packing = { startedAt: Date.now(), packed: {}, updatedAt: Date.now() };
+  if (!target.packing) { markScan(target); target.packing = { startedAt: Date.now(), packed: {}, updatedAt: Date.now() }; }
   packState.currentOrderId = target.id;
   if (!resume) agentPrint(target.trackingNo);
   const line = req.find(l => l.key === ks || (kb && l.key === kb));
@@ -240,8 +246,8 @@ function exportPackXLSX(days = 0) {
   exportXLSX(`打包数据_${days > 0 ? '近' + days + '天_' : ''}${dayKey(Date.now())}.xlsx`, [
     {
       name: '打包出库',
-      rows: [['出库时间', '渠道', '订单号', '运单号', '收件人', '商品明细', '件数', '长(cm)', '宽(cm)', '厚(cm)', '重量(kg)', '备注'],
-        ...verified.map(o => [fmtFull(o.verifiedAt), o.channel || '', o.orderNo || '', o.trackingNo || '',
+      rows: [['刷单时间', '出库时间', '渠道', '订单号', '运单号', '收件人', '商品明细', '件数', '长(cm)', '宽(cm)', '厚(cm)', '重量(kg)', '备注'],
+        ...verified.map(o => [fmtFull(o.scanAt || o.verifiedAt), fmtFull(o.verifiedAt), o.channel || '', o.orderNo || '', o.trackingNo || '',
           o.receiver || '', orderItemsSummary(o), orderPieces(o),
           pv(o, 'l'), pv(o, 'w'), pv(o, 'h'), pv(o, 'kg'), o.note || ''])]
     },
