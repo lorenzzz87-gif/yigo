@@ -17,6 +17,11 @@ const nextConfig: NextConfig = {
           source: '/suvoo',
           destination: '/suvoo/index.html',
         },
+        // SUVOO ERP · 扫码出库工具（独立静态应用）
+        {
+          source: '/suvoo/erp',
+          destination: '/suvoo/erp/index.html',
+        },
         {
           source: '/suvoo/:path((?!.*\\..+$).*)',
           destination: '/suvoo/index.html',

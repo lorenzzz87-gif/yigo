@@ -1,0 +1,65 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <base href="/suvoo/erp/" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="theme-color" content="#f3f1eb" />
+  <title>款刷单 · 扫码出库</title>
+  <link rel="stylesheet" href="./styles.css" />
+</head>
+<body>
+  <main class="app-shell">
+    <header class="topbar">
+      <div class="brand-mark" aria-hidden="true">款</div>
+      <div class="brand-copy"><strong>款刷单</strong><span>SCAN & SHIP</span></div>
+      <nav class="step-nav" aria-label="操作流程">
+        <span class="active">1 产品资料</span><i></i><span>2 开始刷单</span><i></i><span>3 结束导出</span>
+      </nav>
+      <div class="live-time"><span id="today">—</span><strong id="clock">—</strong></div>
+    </header>
+
+    <section class="hero compact-hero">
+      <div><p class="eyebrow">扫码出库工作台</p><h1>一刷一中包，<br><em>结束即成单。</em></h1><p class="hero-copy">先一次性导入产品资料，之后扫描条码即可累计出库数量。每次结束刷单都会生成一份独立的 Excel 出库单。</p></div>
+      <div class="summary-grid">
+        <article><span>产品资料</span><strong id="productCount">0</strong><small>款</small></article>
+        <article><span>本单中包</span><strong id="packTotal">0</strong><small>包</small></article>
+        <article class="summary-primary"><span>本单总件数</span><strong id="qtyTotal">0</strong><small>件</small></article>
+      </div>
+    </section>
+
+    <section class="import-card">
+      <div class="card-title"><div><p class="section-number">产品资料库</p><h2>一次导入，长期使用</h2></div><span id="importStatus">尚未导入产品</span></div>
+      <div class="import-content">
+        <div class="import-help"><strong>Excel 列名要求</strong><p>SKU、条码、品名、每中包数量</p><small>支持 .xlsx、.xls、.csv；条码请在 Excel 中设为文本，避免前导 0 丢失。</small></div>
+        <div class="import-actions">
+          <label class="button button-light file-button">↑ 导入产品 Excel<input id="productFile" type="file" accept=".xlsx,.xls,.csv" /></label>
+          <button id="downloadTemplate" class="text-button" type="button">下载导入模板</button>
+          <button id="clearProducts" class="text-button danger" type="button">清空产品库</button>
+        </div>
+      </div>
+    </section>
+
+    <section class="scan-card" id="scanCard">
+      <div class="scan-head">
+        <div><p class="section-number">当前出库单</p><h2 id="sessionTitle">等待开始刷单</h2><p id="sessionMeta">导入产品后，点击右侧按钮开始一张新出库单。</p></div>
+        <div class="session-actions"><button id="startButton" class="button button-lime" type="button">▶ 开始刷单</button><button id="finishButton" class="button button-red" type="button" disabled>■ 结束刷单</button></div>
+      </div>
+      <div class="scanner-panel">
+        <label for="scanInput">扫描条码</label>
+        <div class="scan-input-wrap"><span class="scan-icon" aria-hidden="true">▥</span><input id="scanInput" disabled inputmode="numeric" autocomplete="off" placeholder="开始刷单后，将光标放在这里扫描条码" /><button id="manualScan" disabled type="button">确认</button></div>
+        <p id="scanFeedback">每扫描一次，默认增加 1 中包。</p>
+      </div>
+    </section>
+
+    <section class="records">
+      <div class="records-toolbar"><div><p class="section-number">本单明细</p><h2>已刷产品 <span id="recordBadge">0 款</span></h2></div><button id="exportButton" class="button button-dark" type="button" disabled>↓ 导出本次 Excel</button></div>
+      <div class="table-wrap"><table><thead><tr><th>序号</th><th>SKU</th><th>条码</th><th>品名</th><th class="num">每中包数量</th><th class="num">中包数</th><th class="num">出库总数量</th><th>最后扫码</th><th class="actions">调整</th></tr></thead><tbody id="recordBody"></tbody></table><div id="emptyState" class="empty-state"><div>▥</div><h3>还没有扫码记录</h3><p>开始刷单并扫描产品条码，明细会自动出现在这里。</p></div></div>
+    </section>
+    <footer><span>款刷单 · 扫码出库工具</span><span>产品资料和未结束的出库单保存在当前浏览器</span></footer>
+  </main>
+  <div id="toast" class="toast" role="status" aria-live="polite"></div>
+  <script src="./xlsx.full.min.js"></script>
+  <script src="./app.js"></script>
+</body>
+</html>
