@@ -11,6 +11,15 @@ const STATUS_LABELS: Record<string, string> = {
   cancelled: '已取消',
 }
 
+// 把「按中包/整箱下单」的订单项换算成「单件价 × 实际件数」，小计保持不变
+function pieceView(item: Order['items'][number], product?: Product) {
+  const isBox = item.unit === '箱'
+  const pieceCount = isBox
+    ? (product?.boxQty || 1)                              // 整箱：每箱件数
+    : Math.max(1, parseInt(String(item.unit)) || 1)      // 中包：中包量（item.unit 存的就是中包量）
+  return { unitPrice: item.price / pieceCount, qty: item.quantity * pieceCount }
+}
+
 function base64ToUint8Array(base64: string): Uint8Array {
   const b64 = base64.includes(',') ? base64.split(',')[1] : base64
   const binary = atob(b64)
@@ -59,10 +68,10 @@ function downloadBuffer(buffer: ArrayBuffer, filename: string) {
 
 export async function exportAllOrders(
   orders: Order[],
-  opts?: { profiles?: Record<string, BuyerProfile | null>; skuById?: Record<string, string> },
+  opts?: { profiles?: Record<string, BuyerProfile | null>; productById?: Record<string, Product> },
 ) {
   const profiles = opts?.profiles || {}
-  const skuById = opts?.skuById || {}
+  const productById = opts?.productById || {}
   const wb = new ExcelJS.Workbook()
   wb.creator = 'Yigo管理端'
   wb.created = new Date()
@@ -84,7 +93,7 @@ export async function exportAllOrders(
   ]
 
   const headerRow = ws.getRow(2)
-  const headers = ['订单号', '客户 / Cliente', '电话 / Tel.', 'P.IVA', '商品明细（编号 名称 × 数量 金额）', '总金额(€)', '状态', '下单时间', '备注']
+  const headers = ['订单号', '客户 / Cliente', '电话 / Tel.', 'P.IVA', '商品明细（编号 名称 × 件数 @ 单价 金额）', '总金额(€)', '状态', '下单时间', '备注']
   headers.forEach((h, i) => { headerRow.getCell(i + 1).value = h })
   styleHeader(headerRow, 'FF374151')
 
@@ -101,8 +110,10 @@ export async function exportAllOrders(
       phone: prof?.telefono || '',
       piva: prof?.piva || '',
       items: order.items.map(i => {
-        const sku = skuById[i.productId]
-        return `${sku ? sku + ' ' : ''}${i.productName} × ${i.quantity}${i.unit}  €${(i.price * i.quantity).toFixed(2)}`
+        const prod = productById[i.productId]
+        const { unitPrice, qty } = pieceView(i, prod)
+        const sku = prod?.sku
+        return `${sku ? sku + ' ' : ''}${i.productName} × ${qty}pz @ €${unitPrice.toFixed(2)}  €${(unitPrice * qty).toFixed(2)}`
       }).join('\n'),
       amount: order.totalAmount,
       status: STATUS_LABELS[order.status] || order.status,
@@ -141,10 +152,10 @@ export async function exportSingleOrder(order: Order, products: Product[], profi
 
   const ws = wb.addWorksheet('订单详情')
   ws.columns = [
-    { width: 14 }, { width: 14 }, { width: 28 }, { width: 12 }, { width: 9 }, { width: 14 }, { width: 10 },
+    { width: 14 }, { width: 14 }, { width: 30 }, { width: 12 }, { width: 9 }, { width: 14 },
   ]
 
-  ws.mergeCells('A1:G1')
+  ws.mergeCells('A1:F1')
   const t = ws.getCell('A1')
   t.value = 'Yigo 易购 · 订单 / Ordine'
   t.font = { bold: true, size: 16, color: { argb: 'FFFFFFFF' } }
@@ -157,12 +168,12 @@ export async function exportSingleOrder(order: Order, products: Product[], profi
     ['客户名', order.buyerName, '下单时间', new Date(order.createdAt).toLocaleString('zh-CN')],
   ]
   info.forEach(([l1, v1, l2, v2]) => {
-    const row = ws.addRow([l1, v1, '', '', l2, v2, ''])
+    const row = ws.addRow([l1, v1, '', l2, v2, ''])
     row.getCell(1).font = { bold: true, color: { argb: 'FF6B7280' } }
-    row.getCell(5).font = { bold: true, color: { argb: 'FF6B7280' } }
+    row.getCell(4).font = { bold: true, color: { argb: 'FF6B7280' } }
     row.height = 22
-    ws.mergeCells(`B${row.number}:D${row.number}`)
-    ws.mergeCells(`F${row.number}:G${row.number}`)
+    ws.mergeCells(`B${row.number}:C${row.number}`)
+    ws.mergeCells(`E${row.number}:F${row.number}`)
   })
 
   // 客户信息 / Cliente（来自 Profilo）
@@ -185,31 +196,32 @@ export async function exportSingleOrder(order: Order, products: Product[], profi
       const cTitle = ws.addRow(['客户信息 / Cliente'])
       cTitle.getCell(1).font = { bold: true, color: { argb: 'FFF97316' } }
       custRows.forEach(([l, v]) => {
-        const row = ws.addRow([l, v, '', '', '', '', ''])
+        const row = ws.addRow([l, v, '', '', '', ''])
         row.getCell(1).font = { bold: true, color: { argb: 'FF6B7280' } }
         row.height = 20
-        ws.mergeCells(`B${row.number}:G${row.number}`)
+        ws.mergeCells(`B${row.number}:F${row.number}`)
       })
     }
   }
 
   if (order.remark) {
-    const row = ws.addRow(['备注 / Note', order.remark, '', '', '', '', ''])
+    const row = ws.addRow(['备注 / Note', order.remark, '', '', '', ''])
     row.getCell(1).font = { bold: true, color: { argb: 'FF6B7280' } }
-    ws.mergeCells(`B${row.number}:G${row.number}`)
+    ws.mergeCells(`B${row.number}:F${row.number}`)
   }
 
   ws.addRow([])
 
-  const itemHeader = ws.addRow(['商品图片', '编号 / Cod.', '商品名称', '单价(€)', '数量', '小计(€)', '单位'])
+  const itemHeader = ws.addRow(['商品图片', '编号 / Cod.', '商品名称', '单价(€)', '数量', '小计(€)'])
   styleHeader(itemHeader, 'FF374151')
   ws.getRow(itemHeader.number).height = 28
 
   for (let i = 0; i < order.items.length; i++) {
     const item = order.items[i]
     const product = products.find(p => p.id === item.productId)
+    const { unitPrice, qty } = pieceView(item, product)
     const rowIdx = itemHeader.number + 1 + i
-    const row = ws.addRow(['', product?.sku || '', item.productName, item.price, item.quantity, item.price * item.quantity, item.unit])
+    const row = ws.addRow(['', product?.sku || '', item.productName, unitPrice, qty, unitPrice * qty])
     row.height = 60
 
     row.getCell(4).numFmt = '€#,##0.00'
@@ -231,9 +243,9 @@ export async function exportSingleOrder(order: Order, products: Product[], profi
   }
 
   ws.addRow([])
-  const totalRow = ws.addRow(['', '', '', '合计', '', { formula: `SUM(F${itemHeader.number + 1}:F${itemHeader.number + order.items.length})` } as ExcelJS.CellFormulaValue, ''])
+  const totalRow = ws.addRow(['', '', '', '', '合计', { formula: `SUM(F${itemHeader.number + 1}:F${itemHeader.number + order.items.length})` } as ExcelJS.CellFormulaValue])
   ws.mergeCells(`A${totalRow.number}:D${totalRow.number}`)
-  totalRow.getCell(4).font = { bold: true }
+  totalRow.getCell(5).font = { bold: true }
   totalRow.getCell(6).numFmt = '€#,##0.00'
   totalRow.getCell(6).font = { bold: true, size: 13, color: { argb: 'FFF97316' } }
   totalRow.height = 28

@@ -63,6 +63,7 @@ export default function WholesalerPage() {
   const [uploadingLogo, setUploadingLogo] = useState(false)
   const [previewOrder, setPreviewOrder] = useState<Order | null>(null)
   const [previewProfile, setPreviewProfile] = useState<BuyerProfile | null>(null)
+  const [previewProducts, setPreviewProducts] = useState<Record<string, Product>>({})
   const [previewLoading, setPreviewLoading] = useState(false)
 
   useEffect(() => {
@@ -181,9 +182,26 @@ export default function WholesalerPage() {
   async function openPreview(order: Order) {
     setPreviewOrder(order)
     setPreviewProfile(null)
+    setPreviewProducts({})
     setPreviewLoading(true)
-    try { setPreviewProfile(await store.getBuyerProfile(order.buyerId)) } catch { /* no profile */ }
+    try {
+      const [prof, prods] = await Promise.all([
+        store.getBuyerProfile(order.buyerId).catch(() => null),
+        store.getProducts(wid, undefined, 1000, 0).catch(() => [] as Product[]),
+      ])
+      setPreviewProfile(prof)
+      const map: Record<string, Product> = {}
+      prods.forEach(p => { map[p.id] = p })
+      setPreviewProducts(map)
+    } catch { /* ignore */ }
     setPreviewLoading(false)
+  }
+
+  // 订单项换算成「单件价 × 实际件数」（与导出一致）
+  function itemPieceView(i: Order['items'][number]) {
+    const isBox = i.unit === '箱'
+    const pieceCount = isBox ? (previewProducts[i.productId]?.boxQty || 1) : Math.max(1, parseInt(String(i.unit)) || 1)
+    return { unitPrice: i.price / pieceCount, qty: i.quantity * pieceCount, sku: previewProducts[i.productId]?.sku }
   }
 
   async function addCategory() {
@@ -266,13 +284,13 @@ export default function WholesalerPage() {
     try {
       const list = orders.filter(o => o.status !== 'pending_review')
       const allProds = await store.getProducts(wid, undefined, 1000, 0)
-      const skuById: Record<string, string> = {}
-      allProds.forEach(p => { if (p.sku) skuById[p.id] = p.sku })
+      const productById: Record<string, Product> = {}
+      allProds.forEach(p => { productById[p.id] = p })
       const buyerIds = [...new Set(list.map(o => o.buyerId))]
       const profs = await Promise.all(buyerIds.map(id => store.getBuyerProfile(id).catch(() => null)))
       const profiles: Record<string, BuyerProfile | null> = {}
       buyerIds.forEach((id, i) => { profiles[id] = profs[i] })
-      await exportAllOrders(list, { profiles, skuById })
+      await exportAllOrders(list, { profiles, productById })
       showToast('导出成功！')
     } catch (e: any) { showToast('导出失败: ' + e.message) }
     setExporting(false)
@@ -729,7 +747,7 @@ export default function WholesalerPage() {
 
       {/* 订单预览 + 打印/PDF */}
       {previewOrder && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4 no-print" onClick={() => setPreviewOrder(null)}>
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" onClick={() => setPreviewOrder(null)}>
           <div className="bg-white rounded-2xl w-full max-w-2xl max-h-[92vh] flex flex-col overflow-hidden" onClick={e => e.stopPropagation()}>
             {/* 顶部操作栏（不打印） */}
             <div className="flex items-center justify-between px-5 py-3 border-b border-gray-100 shrink-0 no-print">
@@ -791,21 +809,25 @@ export default function WholesalerPage() {
                 <table className="w-full text-sm">
                   <thead>
                     <tr className="border-b border-gray-200 text-gray-500 text-xs">
+                      <th className="text-left font-medium py-1.5">编号 · Cod.</th>
                       <th className="text-left font-medium py-1.5">Prodotto · 商品</th>
-                      <th className="text-center font-medium py-1.5 w-16">Q.tà · 数量</th>
+                      <th className="text-center font-medium py-1.5 w-16">Q.tà · 件数</th>
                       <th className="text-right font-medium py-1.5 w-20">Prezzo · 单价</th>
                       <th className="text-right font-medium py-1.5 w-24">Subtot.</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {previewOrder.items.map((it, i) => (
+                    {previewOrder.items.map((it, i) => {
+                      const pv = itemPieceView(it)
+                      return (
                       <tr key={i} className="border-b border-gray-100">
+                        <td className="py-2 text-gray-500">{pv.sku || '—'}</td>
                         <td className="py-2">{it.productName}</td>
-                        <td className="text-center py-2">{it.quantity} {it.unit}</td>
-                        <td className="text-right py-2">€{it.price.toFixed(2)}</td>
-                        <td className="text-right py-2 font-medium">€{(it.price * it.quantity).toFixed(2)}</td>
+                        <td className="text-center py-2">{pv.qty}</td>
+                        <td className="text-right py-2">€{pv.unitPrice.toFixed(2)}</td>
+                        <td className="text-right py-2 font-medium">€{(pv.unitPrice * pv.qty).toFixed(2)}</td>
                       </tr>
-                    ))}
+                    )})}
                   </tbody>
                 </table>
                 <div className="flex justify-end mt-3">

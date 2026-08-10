@@ -60,6 +60,7 @@ export default function B2BPage() {
   const [unitPicker, setUnitPicker] = useState<string | null>(null)
   const [detailProduct, setDetailProduct] = useState<Product | null>(null)
   const [detailImgIdx, setDetailImgIdx] = useState(0)
+  const [orderPreview, setOrderPreview] = useState<Order | null>(null)
   const [wholesalerLogo, setWholesalerLogo] = useState<string | null>(null)
   const [profile, setProfile] = useState<BuyerProfile | null>(null)
   const [profileForm, setProfileForm] = useState<Omit<BuyerProfile, 'userId'>>({})
@@ -199,6 +200,19 @@ export default function B2BPage() {
   const packSizeOf = (p: Product) => Math.max(1, parseInt(String(p.unit)) || 1)
   const unitPriceOf = (p: Product, orderUnit: import('@/lib/store').OrderUnit) =>
     orderUnit === 'box' && p.boxQty ? p.price * p.boxQty : p.price * packSizeOf(p)
+
+  // 订单项换算：中包 → 中包数 × 每包个数 × 单件价（小计不变）
+  function itemPieces(i: Order['items'][number]) {
+    const isBox = i.unit === '箱'
+    const packSize = isBox ? 1 : Math.max(1, parseInt(String(i.unit)) || 1)
+    const perPiece = i.price / packSize
+    return { isBox, packSize, perPiece, pieces: i.quantity * packSize }
+  }
+  function itemBreakdown(i: Order['items'][number]) {
+    const { isBox, packSize, perPiece } = itemPieces(i)
+    if (isBox) return `${i.quantity} ${lang === 'it' ? 'cartoni' : '箱'}`
+    return `${i.quantity} × ${packSize}${lang === 'it' ? 'pz' : '个'} × €${perPiece.toFixed(2)}`
+  }
 
   const cartCount = cart.reduce((s, i) => s + i.quantity, 0)
   const cartTotal = cart.reduce((s, i) => {
@@ -414,24 +428,27 @@ export default function B2BPage() {
             ) : (
               <div className="space-y-3">
                 {orders.map(o => (
-                  <div key={o.id} className="bg-white rounded-xl p-5 shadow-sm">
+                  <button key={o.id} onClick={() => setOrderPreview(o)} className="w-full text-left bg-white rounded-xl p-5 shadow-sm hover:shadow-md transition-shadow">
                     <div className="flex items-center justify-between mb-3">
                       <span className="font-semibold text-gray-800">{o.orderNo}</span>
                       <span className={`text-xs px-2.5 py-1 rounded-full font-medium ${STATUS_COLOR[o.status]}`}>{STATUS[lang][o.status]}</span>
                     </div>
-                    <div className="bg-gray-50 rounded-lg p-3 mb-3 space-y-1">
+                    <div className="bg-gray-50 rounded-lg p-3 mb-3 space-y-1.5">
                       {o.items.map((i, idx) => (
-                        <div key={idx} className="flex justify-between text-sm">
-                          <span className="text-gray-700">{i.productName} × {i.quantity}{i.unit}</span>
-                          <span className="text-gray-500">€{(i.price * i.quantity).toFixed(2)}</span>
+                        <div key={idx} className="flex justify-between text-sm gap-3">
+                          <div className="min-w-0">
+                            <div className="text-gray-800 truncate">{i.productName}</div>
+                            <div className="text-xs text-gray-500">{itemBreakdown(i)}</div>
+                          </div>
+                          <span className="text-gray-600 shrink-0">€{(i.price * i.quantity).toFixed(2)}</span>
                         </div>
                       ))}
                     </div>
                     <div className="flex justify-between items-center">
-                      <span className="text-xs text-gray-400">{new Date(o.createdAt).toLocaleString(lang === 'it' ? 'it-IT' : 'zh-CN')}</span>
+                      <span className="text-xs text-gray-500">{new Date(o.createdAt).toLocaleString(lang === 'it' ? 'it-IT' : 'zh-CN')} · {lang === 'it' ? 'Dettagli' : '查看详情'} →</span>
                       <span className="font-bold text-orange-500 text-lg">€{o.totalAmount.toFixed(2)}</span>
                     </div>
-                  </div>
+                  </button>
                 ))}
               </div>
             )}
@@ -665,6 +682,87 @@ export default function B2BPage() {
                 className="w-full py-3.5 bg-orange-500 text-white rounded-xl font-semibold hover:bg-orange-600 text-lg">
                 + {t.addToCart}
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Order preview (buyer) + print/PDF */}
+      {orderPreview && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" onClick={() => setOrderPreview(null)}>
+          <div className="bg-white rounded-2xl w-full max-w-2xl max-h-[92vh] flex flex-col overflow-hidden" onClick={e => e.stopPropagation()}>
+            <div className="flex items-center justify-between px-5 py-3 border-b border-gray-100 shrink-0 no-print">
+              <h3 className="font-bold text-gray-800">{lang === 'it' ? 'Dettaglio ordine' : '订单详情'}</h3>
+              <div className="flex items-center gap-2">
+                <button onClick={() => window.print()} className="flex items-center gap-1.5 px-4 py-2 bg-orange-500 text-white text-sm rounded-lg hover:bg-orange-600">
+                  <Receipt className="w-4 h-4" strokeWidth={1.75} /> {lang === 'it' ? 'Stampa / PDF' : '打印 / PDF'}
+                </button>
+                <button onClick={() => setOrderPreview(null)} className="w-8 h-8 rounded-full hover:bg-gray-100 flex items-center justify-center text-gray-500"><X className="w-4 h-4" strokeWidth={2} /></button>
+              </div>
+            </div>
+            <div className="print-area overflow-y-auto p-6 text-gray-800">
+              <div className="flex items-start justify-between pb-4 border-b border-gray-200">
+                <div className="flex items-center gap-2">
+                  {wholesalerLogo ? <img src={wholesalerLogo} alt="" className="h-10 w-auto max-w-[120px] object-contain" /> : <img src="/logo.svg" alt="Yigo" className="h-8 w-auto" />}
+                </div>
+                <div className="text-right">
+                  <div className="text-lg font-bold">{orderPreview.orderNo}</div>
+                  <div className="text-xs text-gray-500">{new Date(orderPreview.createdAt).toLocaleString(lang === 'it' ? 'it-IT' : 'zh-CN')}</div>
+                  <div className="text-xs mt-1">{STATUS[lang][orderPreview.status]}</div>
+                </div>
+              </div>
+
+              {/* 客户信息（买家自己的资料） */}
+              {profile && (
+                <div className="py-4 border-b border-gray-200">
+                  <div className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">{lang === 'it' ? 'Dati cliente' : '客户信息'}</div>
+                  <div className="grid grid-cols-2 gap-x-6 gap-y-1 text-sm">
+                    {([
+                      [lang === 'it' ? 'Ragione Sociale' : '公司', profile.ragioneSociale || user.name],
+                      ['P.IVA', profile.piva],
+                      [lang === 'it' ? 'Telefono' : '电话', profile.telefono],
+                      ['Codice SDI', profile.codiceSdi],
+                      ['PEC', profile.pec],
+                      [lang === 'it' ? 'Indirizzo' : '开票地址', [profile.indirizzoFattura, profile.capFattura, profile.cittaFattura, profile.provinciaFattura].filter(Boolean).join(' ')],
+                      [lang === 'it' ? 'Spedizione' : '收货地址', [profile.indirizzoSpedizione, profile.capSpedizione, profile.cittaSpedizione].filter(Boolean).join(' ')],
+                    ] as [string, string | undefined][]).filter(([, v]) => (v || '').trim()).map(([label, value], i) => (
+                      <div key={i} className="flex gap-2"><span className="text-gray-500 shrink-0">{label}:</span><span className="font-medium break-all">{value}</span></div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* 明细 */}
+              <div className="py-4">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b border-gray-200 text-gray-500 text-xs">
+                      <th className="text-left font-medium py-1.5">{lang === 'it' ? 'Prodotto' : '商品'}</th>
+                      <th className="text-center font-medium py-1.5 w-28">{lang === 'it' ? 'Q.tà × pz × prezzo' : '中包×每包×单价'}</th>
+                      <th className="text-right font-medium py-1.5 w-24">Subtot.</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {orderPreview.items.map((it, i) => (
+                      <tr key={i} className="border-b border-gray-100">
+                        <td className="py-2">{it.productName}</td>
+                        <td className="text-center py-2 text-gray-600">{itemBreakdown(it)}</td>
+                        <td className="text-right py-2 font-medium">€{(it.price * it.quantity).toFixed(2)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+                <div className="flex justify-end mt-3">
+                  <div className="flex items-center gap-6">
+                    <span className="text-sm text-gray-500">{lang === 'it' ? 'Totale' : '合计'}</span>
+                    <span className="text-xl font-bold text-orange-600">€{orderPreview.totalAmount.toFixed(2)}</span>
+                  </div>
+                </div>
+              </div>
+
+              {orderPreview.remark && (
+                <div className="pt-3 border-t border-gray-200 text-sm"><span className="text-gray-500">{lang === 'it' ? 'Note' : '备注'}：</span>{orderPreview.remark}</div>
+              )}
             </div>
           </div>
         </div>
