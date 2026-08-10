@@ -483,8 +483,10 @@ export const store = {
   async createOrder(buyerId: string, buyerName: string, cartItems: CartItem[], products: Product[], wholesalerId: string, remark?: string, salesId?: string): Promise<Order> {
     const orderItems: OrderItem[] = cartItems.map(item => {
       const p = products.find(p => p.id === item.productId)!
+      const packSize = Math.max(1, parseInt(String(p.unit)) || 1) // 中包量（每包件数）
       const isBox = item.orderUnit === 'box' && p.boxQty
-      const unitPrice = isBox ? p.price * p.boxQty! : p.price
+      // price 为单件价：中包价 = 单件价 × 中包量；整箱价 = 单件价 × 装箱数
+      const unitPrice = isBox ? p.price * p.boxQty! : p.price * packSize
       const unitLabel = isBox ? '箱' : p.unit
       return { productId: item.productId, productName: p.name, price: unitPrice, quantity: item.quantity, unit: unitLabel, orderUnit: item.orderUnit, boxQty: p.boxQty }
     })

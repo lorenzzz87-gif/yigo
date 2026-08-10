@@ -72,7 +72,8 @@ export default function BuyerPage() {
   const cartTotal = cart.reduce((sum, item) => {
     const p = products.find(p => p.id === item.productId)
     if (!p) return sum
-    const unitPrice = item.orderUnit === 'box' && p.boxQty ? p.price * p.boxQty : p.price
+    const packSize = Math.max(1, parseInt(String(p.unit)) || 1)
+    const unitPrice = item.orderUnit === 'box' && p.boxQty ? p.price * p.boxQty : p.price * packSize
     return sum + unitPrice * item.quantity
   }, 0)
 
@@ -179,7 +180,8 @@ export default function BuyerPage() {
                     const p = products.find(p => p.id === item.productId)
                     if (!p) return null
                     const isBox = item.orderUnit === 'box' && p.boxQty
-                    const unitPrice = isBox ? p.price * p.boxQty! : p.price
+                    const packSize = Math.max(1, parseInt(String(p.unit)) || 1)
+                    const unitPrice = isBox ? p.price * p.boxQty! : p.price * packSize
                     const unitLabel = isBox ? '箱' : p.unit
                     return (
                       <div key={`${item.productId}_${item.orderUnit}_${idx}`} className="bg-white rounded-xl p-3 shadow-sm flex items-center gap-3">

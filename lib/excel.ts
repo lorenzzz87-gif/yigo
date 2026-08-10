@@ -1,6 +1,6 @@
 import ExcelJS from 'exceljs'
 import JSZip from 'jszip'
-import { Order, Product, Category } from './store'
+import { Order, Product, Category, BuyerProfile } from './store'
 
 const STATUS_LABELS: Record<string, string> = {
   pending_review: '待业务员审核',
@@ -57,7 +57,12 @@ function downloadBuffer(buffer: ArrayBuffer, filename: string) {
 
 // ─── Export: All Orders ────────────────────────────────────────────────────
 
-export async function exportAllOrders(orders: Order[]) {
+export async function exportAllOrders(
+  orders: Order[],
+  opts?: { profiles?: Record<string, BuyerProfile | null>; skuById?: Record<string, string> },
+) {
+  const profiles = opts?.profiles || {}
+  const skuById = opts?.skuById || {}
   const wb = new ExcelJS.Workbook()
   wb.creator = 'Yigo管理端'
   wb.created = new Date()
@@ -73,13 +78,13 @@ export async function exportAllOrders(orders: Order[]) {
   ws.getRow(1).height = 32
 
   ws.columns = [
-    { key: 'no', width: 20 }, { key: 'buyer', width: 14 }, { key: 'phone', width: 16 },
-    { key: 'items', width: 38 }, { key: 'amount', width: 14 }, { key: 'status', width: 16 },
-    { key: 'sales', width: 12 }, { key: 'date', width: 20 }, { key: 'remark', width: 22 },
+    { key: 'no', width: 20 }, { key: 'buyer', width: 18 }, { key: 'phone', width: 16 },
+    { key: 'piva', width: 16 }, { key: 'items', width: 46 }, { key: 'amount', width: 14 },
+    { key: 'status', width: 14 }, { key: 'date', width: 20 }, { key: 'remark', width: 22 },
   ]
 
   const headerRow = ws.getRow(2)
-  const headers = ['订单号', '客户名', '联系方式', '商品明细', '总金额(€)', '状态', '业务员', '下单时间', '备注']
+  const headers = ['订单号', '客户 / Cliente', '电话 / Tel.', 'P.IVA', '商品明细（编号 名称 × 数量 金额）', '总金额(€)', '状态', '下单时间', '备注']
   headers.forEach((h, i) => { headerRow.getCell(i + 1).value = h })
   styleHeader(headerRow, 'FF374151')
 
@@ -89,12 +94,18 @@ export async function exportAllOrders(orders: Order[]) {
   }
 
   orders.forEach((order, idx) => {
+    const prof = profiles[order.buyerId]
     const row = ws.addRow({
-      no: order.orderNo, buyer: order.buyerName, phone: '',
-      items: order.items.map(i => `${i.productName} × ${i.quantity}${i.unit}  €${(i.price * i.quantity).toFixed(2)}`).join('\n'),
+      no: order.orderNo,
+      buyer: prof?.ragioneSociale || order.buyerName,
+      phone: prof?.telefono || '',
+      piva: prof?.piva || '',
+      items: order.items.map(i => {
+        const sku = skuById[i.productId]
+        return `${sku ? sku + ' ' : ''}${i.productName} × ${i.quantity}${i.unit}  €${(i.price * i.quantity).toFixed(2)}`
+      }).join('\n'),
       amount: order.totalAmount,
       status: STATUS_LABELS[order.status] || order.status,
-      sales: order.salesId || '',
       date: new Date(order.createdAt).toLocaleString('zh-CN'),
       remark: order.remark || '',
     })
@@ -102,20 +113,20 @@ export async function exportAllOrders(orders: Order[]) {
     const altFill = idx % 2 === 0 ? 'FFFFFFFF' : 'FFFAFAFA'
     row.eachCell((cell, colNum) => {
       styleCell(cell)
-      cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: colNum === 6 ? (statusColorMap[order.status] || 'FFFFFFFF') : altFill } }
+      cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: colNum === 7 ? (statusColorMap[order.status] || 'FFFFFFFF') : altFill } }
     })
 
-    const amountCell = row.getCell(5)
+    const amountCell = row.getCell(6)
     amountCell.numFmt = '€#,##0.00'
     amountCell.font = { bold: true, color: { argb: 'FFF97316' } }
     row.height = Math.max(22, order.items.length * 16 + 6)
   })
 
   ws.addRow([])
-  const sumRow = ws.addRow(['', '', '', `共 ${orders.length} 张订单`, { formula: `SUM(E3:E${orders.length + 2})` } as ExcelJS.CellFormulaValue, '', '', '', ''])
-  sumRow.getCell(4).font = { bold: true }
-  sumRow.getCell(5).numFmt = '€#,##0.00'
-  sumRow.getCell(5).font = { bold: true, color: { argb: 'FFF97316' } }
+  const sumRow = ws.addRow(['', '', '', '', `共 ${orders.length} 张订单`, { formula: `SUM(F3:F${orders.length + 2})` } as ExcelJS.CellFormulaValue, '', '', ''])
+  sumRow.getCell(5).font = { bold: true }
+  sumRow.getCell(6).numFmt = '€#,##0.00'
+  sumRow.getCell(6).font = { bold: true, color: { argb: 'FFF97316' } }
 
   const buffer = await wb.xlsx.writeBuffer()
   const date = new Date().toISOString().slice(0, 10)
@@ -124,18 +135,18 @@ export async function exportAllOrders(orders: Order[]) {
 
 // ─── Export: Single Order ──────────────────────────────────────────────────
 
-export async function exportSingleOrder(order: Order, products: Product[]) {
+export async function exportSingleOrder(order: Order, products: Product[], profile?: BuyerProfile | null) {
   const wb = new ExcelJS.Workbook()
   wb.creator = 'Yigo管理端'
 
   const ws = wb.addWorksheet('订单详情')
   ws.columns = [
-    { width: 14 }, { width: 28 }, { width: 14 }, { width: 10 }, { width: 14 }, { width: 16 },
+    { width: 14 }, { width: 14 }, { width: 28 }, { width: 12 }, { width: 9 }, { width: 14 }, { width: 10 },
   ]
 
-  ws.mergeCells('A1:F1')
+  ws.mergeCells('A1:G1')
   const t = ws.getCell('A1')
-  t.value = 'Yigo 易购 · 订单'
+  t.value = 'Yigo 易购 · 订单 / Ordine'
   t.font = { bold: true, size: 16, color: { argb: 'FFFFFFFF' } }
   t.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF97316' } }
   t.alignment = { vertical: 'middle', horizontal: 'center' }
@@ -144,20 +155,53 @@ export async function exportSingleOrder(order: Order, products: Product[]) {
   const info: [string, string, string, string][] = [
     ['订单号', order.orderNo, '状态', STATUS_LABELS[order.status] || order.status],
     ['客户名', order.buyerName, '下单时间', new Date(order.createdAt).toLocaleString('zh-CN')],
-    ['备注', order.remark || '—', '', ''],
   ]
   info.forEach(([l1, v1, l2, v2]) => {
-    const row = ws.addRow([l1, v1, '', l2, v2, ''])
+    const row = ws.addRow([l1, v1, '', '', l2, v2, ''])
     row.getCell(1).font = { bold: true, color: { argb: 'FF6B7280' } }
-    row.getCell(4).font = { bold: true, color: { argb: 'FF6B7280' } }
+    row.getCell(5).font = { bold: true, color: { argb: 'FF6B7280' } }
     row.height = 22
-    if (!l2) ws.mergeCells(`B${row.number}:F${row.number}`)
-    else ws.mergeCells(`B${row.number}:C${row.number}`)
+    ws.mergeCells(`B${row.number}:D${row.number}`)
+    ws.mergeCells(`F${row.number}:G${row.number}`)
   })
+
+  // 客户信息 / Cliente（来自 Profilo）
+  if (profile) {
+    const billAddr = [profile.indirizzoFattura, profile.capFattura, profile.cittaFattura, profile.provinciaFattura].filter(Boolean).join(' ')
+    const shipAddr = [profile.indirizzoSpedizione, profile.capSpedizione, profile.cittaSpedizione].filter(Boolean).join(' ')
+    const custRows = ([
+      ['公司 / Ragione Sociale', profile.ragioneSociale || ''],
+      ['P.IVA', profile.piva || ''],
+      ['税号 / Cod. Fiscale', profile.codiceFiscale || ''],
+      ['电话 / Telefono', profile.telefono || ''],
+      ['Email', profile.emailOrdini || ''],
+      ['Codice SDI', profile.codiceSdi || ''],
+      ['PEC', profile.pec || ''],
+      ['开票地址 / Indirizzo', billAddr],
+      ['收货地址 / Spedizione', shipAddr],
+      ['收货备注 / Note', profile.noteConsegna || ''],
+    ] as [string, string][]).filter(([, v]) => (v || '').trim())
+    if (custRows.length) {
+      const cTitle = ws.addRow(['客户信息 / Cliente'])
+      cTitle.getCell(1).font = { bold: true, color: { argb: 'FFF97316' } }
+      custRows.forEach(([l, v]) => {
+        const row = ws.addRow([l, v, '', '', '', '', ''])
+        row.getCell(1).font = { bold: true, color: { argb: 'FF6B7280' } }
+        row.height = 20
+        ws.mergeCells(`B${row.number}:G${row.number}`)
+      })
+    }
+  }
+
+  if (order.remark) {
+    const row = ws.addRow(['备注 / Note', order.remark, '', '', '', '', ''])
+    row.getCell(1).font = { bold: true, color: { argb: 'FF6B7280' } }
+    ws.mergeCells(`B${row.number}:G${row.number}`)
+  }
 
   ws.addRow([])
 
-  const itemHeader = ws.addRow(['商品图片', '商品名称', '单价(€)', '数量', '小计(€)', '单位'])
+  const itemHeader = ws.addRow(['商品图片', '编号 / Cod.', '商品名称', '单价(€)', '数量', '小计(€)', '单位'])
   styleHeader(itemHeader, 'FF374151')
   ws.getRow(itemHeader.number).height = 28
 
@@ -165,12 +209,12 @@ export async function exportSingleOrder(order: Order, products: Product[]) {
     const item = order.items[i]
     const product = products.find(p => p.id === item.productId)
     const rowIdx = itemHeader.number + 1 + i
-    const row = ws.addRow(['', item.productName, item.price, item.quantity, item.price * item.quantity, item.unit])
+    const row = ws.addRow(['', product?.sku || '', item.productName, item.price, item.quantity, item.price * item.quantity, item.unit])
     row.height = 60
 
-    row.getCell(3).numFmt = '€#,##0.00'
-    row.getCell(5).numFmt = '€#,##0.00'
-    row.getCell(5).font = { bold: true, color: { argb: 'FFF97316' } }
+    row.getCell(4).numFmt = '€#,##0.00'
+    row.getCell(6).numFmt = '€#,##0.00'
+    row.getCell(6).font = { bold: true, color: { argb: 'FFF97316' } }
     row.eachCell(cell => {
       styleCell(cell)
       cell.alignment = { vertical: 'middle', horizontal: 'center', wrapText: true }
@@ -187,11 +231,11 @@ export async function exportSingleOrder(order: Order, products: Product[]) {
   }
 
   ws.addRow([])
-  const totalRow = ws.addRow(['', '', '', '合计', { formula: `SUM(E${itemHeader.number + 1}:E${itemHeader.number + order.items.length})` } as ExcelJS.CellFormulaValue, ''])
-  ws.mergeCells(`A${totalRow.number}:C${totalRow.number}`)
+  const totalRow = ws.addRow(['', '', '', '合计', '', { formula: `SUM(F${itemHeader.number + 1}:F${itemHeader.number + order.items.length})` } as ExcelJS.CellFormulaValue, ''])
+  ws.mergeCells(`A${totalRow.number}:D${totalRow.number}`)
   totalRow.getCell(4).font = { bold: true }
-  totalRow.getCell(5).numFmt = '€#,##0.00'
-  totalRow.getCell(5).font = { bold: true, size: 13, color: { argb: 'FFF97316' } }
+  totalRow.getCell(6).numFmt = '€#,##0.00'
+  totalRow.getCell(6).font = { bold: true, size: 13, color: { argb: 'FFF97316' } }
   totalRow.height = 28
 
   const buffer = await wb.xlsx.writeBuffer()

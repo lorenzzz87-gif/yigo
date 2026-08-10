@@ -195,12 +195,16 @@ export default function B2BPage() {
   const liveMissing = missingRequired(profileForm)
   const fieldErr = (key: string) => showProfileErrors && (liveMissing.includes(key) || ((key === 'codiceSdi' || key === 'pec') && liveMissing.includes('sdi/pec')))
 
+  // 单件价 → 下单单位价：中包价 = 单件价 × 中包量；整箱价 = 单件价 × 装箱数
+  const packSizeOf = (p: Product) => Math.max(1, parseInt(String(p.unit)) || 1)
+  const unitPriceOf = (p: Product, orderUnit: import('@/lib/store').OrderUnit) =>
+    orderUnit === 'box' && p.boxQty ? p.price * p.boxQty : p.price * packSizeOf(p)
+
   const cartCount = cart.reduce((s, i) => s + i.quantity, 0)
   const cartTotal = cart.reduce((s, i) => {
     const p = productsForCart[i.productId]
     if (!p) return s
-    const unitPrice = i.orderUnit === 'box' && p.boxQty ? p.price * p.boxQty : p.price
-    return s + unitPrice * i.quantity
+    return s + unitPriceOf(p, i.orderUnit) * i.quantity
   }, 0)
 
   if (!user) return null
@@ -343,7 +347,7 @@ export default function B2BPage() {
                             )}
                           </div>
                           <div className="mt-auto flex items-center justify-between">
-                            <span className="font-bold text-orange-500 text-lg">€{p.price.toFixed(2)}</span>
+                            <span className="font-bold text-orange-500 text-lg">€{p.price.toFixed(2)}<span className="text-xs font-normal text-gray-400"> /pz</span></span>
                             {(packItem || boxItem) ? (
                               <div className="flex flex-col gap-1 items-end">
                                 {packItem && (
@@ -366,11 +370,11 @@ export default function B2BPage() {
                             ) : showPicker ? (
                               <div className="flex flex-col gap-1 items-end">
                                 <button onClick={() => addToCart(p.id, 'pack')} className="text-xs px-2 py-1 bg-orange-500 text-white rounded-lg font-medium whitespace-nowrap">
-                                  {lang === 'it' ? `Conf. ${p.unit} pz` : `中包 ${p.unit} pz`}
+                                  {lang === 'it' ? `Conf. ${p.unit} pz` : `中包 ${p.unit} pz`} · €{unitPriceOf(p, 'pack').toFixed(2)}
                                 </button>
                                 {p.boxQty && (
                                   <button onClick={() => addToCart(p.id, 'box')} className="text-xs px-2 py-1 bg-orange-700 text-white rounded-lg font-medium whitespace-nowrap">
-                                    {lang === 'it' ? `Cartone ${p.boxQty} pz` : `整箱 ${p.boxQty} pz`}
+                                    {lang === 'it' ? `Cartone ${p.boxQty} pz` : `整箱 ${p.boxQty} pz`} · €{unitPriceOf(p, 'box').toFixed(2)}
                                   </button>
                                 )}
                                 <button onClick={() => setUnitPicker(null)} className="text-xs text-gray-400 hover:text-gray-600 inline-flex items-center gap-0.5"><X className="w-3 h-3" strokeWidth={2} /></button>
@@ -690,7 +694,7 @@ export default function B2BPage() {
                     const p = productsForCart[item.productId]
                     if (!p) return null
                     const isBox = item.orderUnit === 'box' && p.boxQty
-                    const unitPrice = isBox ? p.price * p.boxQty! : p.price
+                    const unitPrice = unitPriceOf(p, item.orderUnit)
                     const unitLabel = isBox ? (lang === 'it' ? 'cartone' : '箱') : (lang === 'it' ? 'cf' : p.unit)
                     return (
                       <div key={`${item.productId}_${item.orderUnit}_${idx}`} className="flex items-center gap-3 bg-gray-50 rounded-xl p-3">

@@ -264,7 +264,15 @@ export default function WholesalerPage() {
   async function handleExportAll() {
     setExporting(true)
     try {
-      await exportAllOrders(orders.filter(o => o.status !== 'pending_review'))
+      const list = orders.filter(o => o.status !== 'pending_review')
+      const allProds = await store.getProducts(wid, undefined, 1000, 0)
+      const skuById: Record<string, string> = {}
+      allProds.forEach(p => { if (p.sku) skuById[p.id] = p.sku })
+      const buyerIds = [...new Set(list.map(o => o.buyerId))]
+      const profs = await Promise.all(buyerIds.map(id => store.getBuyerProfile(id).catch(() => null)))
+      const profiles: Record<string, BuyerProfile | null> = {}
+      buyerIds.forEach((id, i) => { profiles[id] = profs[i] })
+      await exportAllOrders(list, { profiles, skuById })
       showToast('导出成功！')
     } catch (e: any) { showToast('导出失败: ' + e.message) }
     setExporting(false)
@@ -273,7 +281,11 @@ export default function WholesalerPage() {
   async function handleExportSingle(order: Order) {
     setExporting(true)
     try {
-      await exportSingleOrder(order, products)
+      const [prof, allProds] = await Promise.all([
+        store.getBuyerProfile(order.buyerId).catch(() => null),
+        store.getProducts(wid, undefined, 1000, 0),
+      ])
+      await exportSingleOrder(order, allProds, prof)
       showToast('导出成功！')
     } catch (e: any) { showToast('导出失败: ' + e.message) }
     setExporting(false)
