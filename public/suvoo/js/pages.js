@@ -990,6 +990,9 @@ function renderSettings(el) {
         <input class="input mono" style="width:280px" data-pa-url value="${esc(DB.settings.printAgentUrl || 'http://127.0.0.1:17777')}" placeholder="http://127.0.0.1:17777">
         <button class="btn" data-pa-test>${icon('printer', 15)}测试连接</button>
       </div>
+      <div data-pa-settings class="mt-14" style="border-top:1px solid var(--border-soft);padding-top:12px">
+        <p class="small dim">连接后可在此选择打印机和缩放模式（直接下发助手，无需改文件）。点上方「测试连接」加载。</p>
+      </div>
     </div>
     <div class="card">
       <div class="card-title">${icon('save', 16)}数据备份</div>
@@ -1033,20 +1036,54 @@ function renderSettings(el) {
     DB.settings.printAgentUrl = e.target.value.trim() || 'http://127.0.0.1:17777';
     save();
   });
+  const paBase = () => (el.querySelector('[data-pa-url]').value.trim() || 'http://127.0.0.1:17777').replace(/\/$/, '');
+  async function loadPrinterSettings() {
+    const box = el.querySelector('[data-pa-settings]');
+    try {
+      const d = await (await fetch(paBase() + '/printers', { signal: AbortSignal.timeout(6000) })).json();
+      const modes = [['noscale', '原尺寸（最清晰）'], ['fit', '适配居中'], ['shrink', '超出缩小']];
+      box.innerHTML = `
+        <div class="form-row">
+          <div class="field"><label>打印机</label>
+            <select class="select" data-pa-printer>
+              <option value="">（系统默认打印机）</option>
+              ${(d.printers || []).map(p => `<option ${d.current === p ? 'selected' : ''}>${esc(p)}</option>`).join('')}
+            </select></div>
+          <div class="field"><label>缩放模式</label>
+            <select class="select" data-pa-scale>
+              ${modes.map(([v, lbl]) => `<option value="${v}" ${d.printSettings === v ? 'selected' : ''}>${lbl}</option>`).join('')}
+            </select></div>
+        </div>
+        <button class="btn btn-primary btn-sm" data-pa-save>${icon('save', 14)}保存到打印助手</button>
+        ${!(d.printers || []).length ? '<span class="small dim" style="margin-left:8px">没读到打印机列表（可留系统默认）</span>' : ''}`;
+      box.querySelector('[data-pa-save]').addEventListener('click', async ev => {
+        const b = ev.currentTarget; b.disabled = true;
+        const printer = box.querySelector('[data-pa-printer]').value;
+        const scale = box.querySelector('[data-pa-scale]').value;
+        try {
+          await fetch(paBase() + '/config?printer=' + encodeURIComponent(printer) + '&printSettings=' + scale, { signal: AbortSignal.timeout(6000) });
+          toast(t('打印机设置已保存'), 'success');
+        } catch (e2) { toast(t('保存失败，请确认助手在运行'), 'error'); }
+        b.disabled = false;
+      });
+    } catch (e) {
+      box.innerHTML = `<p class="small neg">连不上助手，无法加载打印机列表。请先点「测试连接」确认助手在运行。</p>`;
+    }
+  }
   el.querySelector('[data-pa-test]')?.addEventListener('click', async e => {
     const btn = e.currentTarget;
     btn.disabled = true;
-    const base = (el.querySelector('[data-pa-url]').value.trim() || 'http://127.0.0.1:17777').replace(/\/$/, '');
     try {
-      const res = await fetch(base + '/ping', { signal: AbortSignal.timeout(6000) });
+      const res = await fetch(paBase() + '/ping', { signal: AbortSignal.timeout(6000) });
       const d = await res.json();
-      if (d.ok) toast(t('打印助手已连接：{files} 个 PDF / {pages} 页面单', { files: d.files, pages: d.pages }), 'success');
+      if (d.ok) { toast(t('打印助手已连接：{files} 个 PDF / {pages} 页面单', { files: d.files, pages: d.pages }), 'success'); loadPrinterSettings(); }
       else toast(t('打印助手响应异常'), 'error');
     } catch (err) {
       toast(t('连不上打印助手，请确认打包电脑上 start.bat 正在运行'), 'error');
     }
     btn.disabled = false;
   });
+  if (DB.settings.printAgent) loadPrinterSettings();
   el.querySelector('[data-cl-out]')?.addEventListener('click', async () => {
     await cloudLogout();
     render();
