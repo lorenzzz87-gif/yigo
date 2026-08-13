@@ -975,7 +975,7 @@ function renderSettings(el) {
         <label class="checkbox-line"><input type="checkbox" data-set="packVerifyItems" ${DB.settings.packVerifyItems !== false ? 'checked' : ''}>开启</label>
       </div>
       <div class="setting-line">
-        <div class="sl-txt"><b>单件订单扫面单直发</b><span>扫码打包页：只有 1 件商品的订单扫面单直接出库，无需再扫商品</span></div>
+        <div class="sl-txt"><b>单件订单确认尺寸</b><span>单件订单扫单后确认长宽高重再出库，并按 SKU 记忆（下次自动带出）。关闭则扫单直接出库</span></div>
         <label class="checkbox-line"><input type="checkbox" data-set="packSingleFast" ${DB.settings.packSingleFast !== false ? 'checked' : ''}>开启</label>
       </div>
     </div>

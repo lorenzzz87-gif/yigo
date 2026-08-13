@@ -10,7 +10,8 @@ const packState = {
   session: [],  // {at, code, result, orderId}  result: fast|done|force|wrong|unknown|dupw|undone
   event: null,  // {kind:'ok'|'warn'|'err'|'info', msg}  最近一次扫描反馈
   dims: { l: '', w: '', h: '', kg: '' }, // 包裹长宽厚重（选填），出库时附到订单
-  lastContents: null // {kind:'fast'|'done', no, items:[{sku,name,qty}]} 最近出库包裹内容（大字显示给打包员）
+  lastContents: null, // {kind:'fast'|'done', no, items:[{sku,name,qty}]} 最近出库包裹内容（大字显示给打包员）
+  confirmSingle: null // 单件订单尺寸确认态 {orderId, sku, name, productId, hadDims, notice}
 };
 
 function rememberContents(o, kind) {
@@ -35,13 +36,57 @@ async function agentPrint(no) {
   }
 }
 
-// 出库时把选填的尺寸/重量附到订单（随订单行同步上云），然后清空输入
-function attachParcel(o) {
+// 解析输入框里的尺寸重量（>0 才取，否则空）
+function parseDims() {
   const d = packState.dims;
   const n = v => { const x = parseFloat(v); return isFinite(x) && x > 0 ? x : ''; };
-  const p = { l: n(d.l), w: n(d.w), h: n(d.h), kg: n(d.kg) };
+  return { l: n(d.l), w: n(d.w), h: n(d.h), kg: n(d.kg) };
+}
+// 出库时把选填的尺寸/重量附到订单（随订单行同步上云），然后清空输入
+function attachParcel(o) {
+  const p = parseDims();
   if (p.l !== '' || p.w !== '' || p.h !== '' || p.kg !== '') o.parcel = p;
   packState.dims = { l: '', w: '', h: '', kg: '' };
+}
+
+/* ---------- 单件订单尺寸确认（按 SKU 记忆长宽高重） ---------- */
+// 单件（1 个 SKU × 1 件）扫单后进入确认态：带出该 SKU 存过的尺寸供确认/修改
+function enterConfirmSingle(o, line, notice) {
+  const p = line.sku ? productByCode(line.sku) : null;
+  const d = (p && p.dims) ? p.dims : {};
+  const has = !!(p && p.dims && (p.dims.l || p.dims.w || p.dims.h || p.dims.kg));
+  packState.dims = { l: d.l ?? '', w: d.w ?? '', h: d.h ?? '', kg: d.kg ?? '' };
+  packState.confirmSingle = { orderId: o.id, sku: line.sku, name: line.name, productId: p ? p.id : null, hadDims: has, notice: notice || '' };
+  packEvt('info', has
+    ? t('已带出该商品上次尺寸，确认或修改后点「确认出库」') + (notice || '')
+    : t('请填写该商品尺寸重量，点「确认出库」保存') + (notice || ''));
+  playBeep('tick');
+}
+// 确认出库：尺寸覆盖写回 SKU，附到订单，出库
+function confirmSinglePack() {
+  const cs = packState.confirmSingle;
+  if (!cs) return;
+  const o = DB.orders.find(x => x.id === cs.orderId);
+  packState.confirmSingle = null;
+  if (!o) { packState.dims = { l: '', w: '', h: '', kg: '' }; return; }
+  const parcel = parseDims();
+  if (cs.productId) {
+    const p = DB.products.find(x => x.id === cs.productId);
+    if (p) p.dims = parcel; // 覆盖该 SKU 的记忆尺寸（随云同步）
+  }
+  if (parcel.l !== '' || parcel.w !== '' || parcel.h !== '' || parcel.kg !== '') o.parcel = parcel;
+  packState.dims = { l: '', w: '', h: '', kg: '' };
+  rememberContents(o, 'fast');
+  verifyOrder(o); // 内部 save() + 同步（含商品 dims 变更）
+  agentPrint(o.trackingNo);
+  packLog(o.trackingNo || o.orderNo || '', 'fast', o.id);
+  packEvt('ok', t('已出库并记住该商品尺寸：{no}', { no: o.trackingNo || o.orderNo }));
+  playBeep('ok');
+}
+function abandonConfirmSingle() {
+  packState.confirmSingle = null;
+  packState.dims = { l: '', w: '', h: '', kg: '' };
+  packEvt('info', t('已放弃，未出库'));
 }
 
 function packCurrent() {
@@ -63,6 +108,18 @@ function focusPack() {
 function handlePackScan(code) {
   code = String(code || '').trim();
   if (!code) return;
+  // 单件尺寸确认态：再扫同一面单=确认出库；扫别的先拦住
+  if (packState.confirmSingle) {
+    const cs = packState.confirmSingle;
+    const o = DB.orders.find(x => x.id === cs.orderId);
+    if (o && (normCode(code) === normCode(o.trackingNo) || normCode(code) === normCode(o.orderNo))) {
+      confirmSinglePack();
+    } else {
+      packEvt('warn', t('请先点「确认出库」或「放弃」处理当前包裹'));
+      playBeep('dup');
+    }
+    render(); focusPack(); return;
+  }
   const cur = packCurrent();
   if (!cur) handlePackWaybill(code);
   else handlePackItem(cur, code);
@@ -89,9 +146,14 @@ function handlePackWaybill(code) {
   }
   const req = packRequired(o);
   const total = req.reduce((s, l) => s + l.qty, 0);
-  // 智能混合：单件订单直发；「逐件核对」关闭时多件订单也直发
-  if (!req.length || DB.settings.packVerifyItems === false ||
-      (total <= 1 && DB.settings.packSingleFast !== false)) {
+  // 单件订单（1 个 SKU × 1 件）：进入尺寸确认态，按 SKU 记忆长宽高重
+  if (req.length === 1 && total === 1 && DB.settings.packSingleFast !== false) {
+    markScan(o);
+    enterConfirmSingle(o, req[0], '');
+    return;
+  }
+  // 无明细 / 关闭逐件核对 / 关闭单件确认的单件 → 直接出库
+  if (!req.length || DB.settings.packVerifyItems === false || total <= 1) {
     markScan(o);
     attachParcel(o);
     rememberContents(o, 'fast');
@@ -136,9 +198,14 @@ function handleProductEntry(p, code) {
 
   const req = packRequired(target);
   const total = req.reduce((sum, l) => sum + l.qty, 0);
-  // 单件订单（或关闭逐件核对时）：扫商品直接出库
-  if (DB.settings.packVerifyItems === false ||
-      (total <= 1 && DB.settings.packSingleFast !== false)) {
+  // 单件订单（1 个 SKU × 1 件）：进入尺寸确认态，按 SKU 记忆
+  if (req.length === 1 && total === 1 && DB.settings.packSingleFast !== false) {
+    markScan(target);
+    enterConfirmSingle(target, req[0], notice);
+    return;
+  }
+  // 无明细 / 关闭逐件核对 / 关闭单件确认的单件 → 扫商品直接出库
+  if (DB.settings.packVerifyItems === false || total <= 1) {
     markScan(target);
     attachParcel(target);
     rememberContents(target, 'fast');
@@ -288,6 +355,24 @@ function packLastHTML() {
   </div>`;
 }
 
+// 单件尺寸确认卡片
+function packConfirmSingleHTML(cs) {
+  return `<div class="pk-last" style="border-color:var(--warn);background:var(--warn-weak)">
+    <div class="pk-last-head" style="color:#B45309">${icon('pack', 18)}${esc(t('单件出库 · 请确认尺寸重量'))}</div>
+    <div class="pk-last-row"><div class="pk-last-main">
+      ${cs.name && cs.name !== cs.sku ? `<span class="pk-last-name">${esc(cs.name)}</span>` : ''}
+      <span class="pk-last-sku mono">${esc(cs.sku || cs.name)}</span>
+    </div></div>
+    <p class="small dim">${cs.hadDims
+      ? esc(t('↑ 已带出该商品上次尺寸，如有变化直接改（确认后覆盖记录）'))
+      : esc(t('↑ 请在上方填写该商品尺寸重量，确认后记到该商品'))}</p>
+    <div class="flex" style="flex-wrap:wrap">
+      <button class="btn btn-accent" data-pk-confirm-single>${icon('check', 15)}${t('确认出库')}</button>
+      <button class="btn" data-pk-abandon-single>${t('放弃')}</button>
+    </div>
+  </div>`;
+}
+
 /* ---------- 页面 ---------- */
 function packEventHTML() {
   const e = packState.event;
@@ -384,7 +469,7 @@ function renderPack(el) {
             <input class="input" type="number" min="0" step="0.01" data-dim="kg" placeholder="重 kg" value="${esc(d.kg)}">
           </div>
           ${packEventHTML()}
-          ${cur ? packChecklistHTML(cur) : packLastHTML()}
+          ${packState.confirmSingle ? packConfirmSingleHTML(packState.confirmSingle) : cur ? packChecklistHTML(cur) : packLastHTML()}
         </div>
         <div class="card mt-14">
           <div class="card-title">${icon('orders', 16)}打包队列<span class="spacer"></span>
@@ -428,16 +513,26 @@ function renderPack(el) {
     if (e.key === 'Enter' && !e.isComposing) { e.preventDefault(); handlePackScan(input.value); }
   });
   attachAutoScan(input, code => handlePackScan(code));
-  setTimeout(() => input.focus(), 30);
+  // 单件确认态：焦点给到「长」输入框方便直接量填；否则回到扫描框
+  if (packState.confirmSingle) {
+    setTimeout(() => { const l = el.querySelector('[data-dim="l"]'); (l || input).focus(); l && l.select(); }, 30);
+  } else {
+    setTimeout(() => input.focus(), 30);
+  }
 
   el.querySelector('[data-pk-beep]').addEventListener('change', e => {
     DB.settings.beep = e.target.checked;
     save();
   });
-  // 尺寸/重量输入（存内存，出库时附单）
-  el.querySelectorAll('[data-dim]').forEach(inp => inp.addEventListener('input', () => {
-    packState.dims[inp.dataset.dim] = inp.value;
-  }));
+  // 尺寸/重量输入（存内存，出库时附单）；确认态下回车=确认出库
+  el.querySelectorAll('[data-dim]').forEach(inp => {
+    inp.addEventListener('input', () => { packState.dims[inp.dataset.dim] = inp.value; });
+    inp.addEventListener('keydown', e => {
+      if (e.key === 'Enter' && packState.confirmSingle) { e.preventDefault(); confirmSinglePack(); render(); focusPack(); }
+    });
+  });
+  el.querySelector('[data-pk-confirm-single]')?.addEventListener('click', () => { confirmSinglePack(); render(); focusPack(); });
+  el.querySelector('[data-pk-abandon-single]')?.addEventListener('click', () => { abandonConfirmSingle(); render(); focusPack(); });
   el.querySelector('[data-pk-xlsx]').addEventListener('click', () => exportPackXLSX(0));
   el.querySelector('[data-pk-xlsx3]').addEventListener('click', () => exportPackXLSX(3));
   el.querySelector('[data-pk-clear]')?.addEventListener('click', () => {
