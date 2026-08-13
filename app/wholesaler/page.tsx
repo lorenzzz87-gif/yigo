@@ -18,6 +18,7 @@ import {
   GripVertical,
   Eye,
   Printer,
+  Users,
 } from 'lucide-react'
 import { store, User, Product, Order, Category, Invite, BuyerProfile, getStatusLabel } from '@/lib/store'
 import { exportAllOrders, exportSingleOrder } from '@/lib/excel'
@@ -28,7 +29,12 @@ export default function WholesalerPage() {
   const router = useRouter()
   const [user, setUser] = useState<User | null>(null)
   const [wid, setWid] = useState<string>('')
-  const [tab, setTab] = useState<'orders' | 'products' | 'import' | 'invites' | 'categories'>('orders')
+  const [tab, setTab] = useState<'orders' | 'products' | 'import' | 'invites' | 'categories' | 'customers'>('orders')
+  const [buyers, setBuyers] = useState<User[]>([])
+  const [buyerProfileMap, setBuyerProfileMap] = useState<Record<string, BuyerProfile>>({})
+  const [custYear, setCustYear] = useState<number | 'all'>('all')
+  const [custMonth, setCustMonth] = useState<number>(0) // 0 = 全年
+  const [custDetail, setCustDetail] = useState<User | null>(null)
   const [invites, setInvites] = useState<Invite[]>([])
   const [newInvite, setNewInvite] = useState<Invite | null>(null)
   const [generating, setGenerating] = useState(false)
@@ -76,8 +82,9 @@ export default function WholesalerPage() {
   }, [router])
 
   async function refreshData(w: string) {
-    const [o, c, inv] = await Promise.all([store.getOrders(w), store.getCategories(w), store.getInvites(w)])
-    setOrders(o); setCategories(c); setInvites(inv)
+    const [o, c, inv, bs] = await Promise.all([store.getOrders(w), store.getCategories(w), store.getInvites(w), store.getBuyers(w)])
+    setOrders(o); setCategories(c); setInvites(inv); setBuyers(bs)
+    store.getBuyerProfiles(bs.map(b => b.id)).then(setBuyerProfileMap).catch(() => {})
     loadProducts(w, search, 0)
   }
 
@@ -360,6 +367,7 @@ export default function WholesalerPage() {
             ['orders', '订单管理', ClipboardList],
             ['products', '商品管理', Package],
             ['import', '批量导入', FileUp],
+            ['customers', '客户', Users],
             ['invites', '客户邀请', Ticket],
             ['categories', '分类管理', Tags],
           ] as const).map(([t, label, Icon]) => (
@@ -577,6 +585,78 @@ export default function WholesalerPage() {
             </div>
           </div>
         )}
+
+        {tab === 'customers' && (() => {
+          // 有效消费订单（排除已取消/待接单）
+          const paidOrders = orders.filter(o => !['cancelled', 'pending_review'].includes(o.status))
+          const years = [...new Set(paidOrders.map(o => new Date(o.createdAt).getFullYear()))].sort((a, b) => b - a)
+          const inPeriod = (iso: string) => {
+            if (custYear === 'all') return true
+            const d = new Date(iso)
+            if (d.getFullYear() !== custYear) return false
+            if (custMonth !== 0 && d.getMonth() + 1 !== custMonth) return false
+            return true
+          }
+          const periodOrders = paidOrders.filter(o => inPeriod(o.createdAt))
+          const spendByBuyer: Record<string, { total: number; count: number }> = {}
+          periodOrders.forEach(o => {
+            const s = spendByBuyer[o.buyerId] || { total: 0, count: 0 }
+            s.total += o.totalAmount; s.count += 1
+            spendByBuyer[o.buyerId] = s
+          })
+          const rows = buyers
+            .map(b => ({ buyer: b, prof: buyerProfileMap[b.id], spend: spendByBuyer[b.id] || { total: 0, count: 0 } }))
+            .sort((a, b) => b.spend.total - a.spend.total)
+          const grandTotal = periodOrders.reduce((s, o) => s + o.totalAmount, 0)
+          const periodLabel = custYear === 'all' ? '全部时间' : custMonth === 0 ? `${custYear}年` : `${custYear}年${custMonth}月`
+
+          return (
+            <div>
+              {/* 时间筛选 */}
+              <div className="flex items-center gap-2 mb-4 flex-wrap">
+                <span className="text-sm text-gray-500">消费统计：</span>
+                <select value={custYear} onChange={e => setCustYear(e.target.value === 'all' ? 'all' : Number(e.target.value))}
+                  className="border border-gray-200 rounded-lg px-3 py-1.5 text-sm text-gray-800 outline-none focus:border-orange-400">
+                  <option value="all">全部时间</option>
+                  {years.map(y => <option key={y} value={y}>{y}年</option>)}
+                </select>
+                {custYear !== 'all' && (
+                  <select value={custMonth} onChange={e => setCustMonth(Number(e.target.value))}
+                    className="border border-gray-200 rounded-lg px-3 py-1.5 text-sm text-gray-800 outline-none focus:border-orange-400">
+                    <option value={0}>全年</option>
+                    {Array.from({ length: 12 }, (_, i) => i + 1).map(m => <option key={m} value={m}>{m}月</option>)}
+                  </select>
+                )}
+                <span className="ml-auto text-sm text-gray-600">{periodLabel} · {buyers.length} 位客户 · 总消费 <span className="font-bold text-orange-500">€{grandTotal.toFixed(2)}</span></span>
+              </div>
+
+              {rows.length === 0 ? (
+                <div className="text-center text-gray-500 py-16 text-sm">还没有客户。到「客户邀请」生成邀请码发给商家注册。</div>
+              ) : (
+                <div className="space-y-2">
+                  {rows.map(({ buyer, prof, spend }) => (
+                    <button key={buyer.id} onClick={() => setCustDetail(buyer)}
+                      className="w-full text-left bg-white rounded-xl p-4 shadow-sm hover:shadow-md transition-shadow flex items-center gap-4">
+                      <div className="w-10 h-10 rounded-full bg-orange-100 text-orange-600 flex items-center justify-center font-bold shrink-0">
+                        {(prof?.ragioneSociale || buyer.name || '?').slice(0, 1)}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <div className="font-medium text-gray-800 truncate">{prof?.ragioneSociale || buyer.name}</div>
+                        <div className="text-xs text-gray-500 truncate">
+                          {[prof?.piva && `P.IVA ${prof.piva}`, prof?.telefono || buyer.phone, buyer.email].filter(Boolean).join(' · ') || '未填写资料'}
+                        </div>
+                      </div>
+                      <div className="text-right shrink-0">
+                        <div className="font-bold text-orange-500">€{spend.total.toFixed(2)}</div>
+                        <div className="text-xs text-gray-400">{spend.count} 单</div>
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          )
+        })()}
       </div>
 
       {showProductForm && (
@@ -847,6 +927,67 @@ export default function WholesalerPage() {
           </div>
         </div>
       )}
+
+      {/* 客户详情 */}
+      {custDetail && (() => {
+        const prof = buyerProfileMap[custDetail.id]
+        const myOrders = orders.filter(o => o.buyerId === custDetail.id && !['cancelled', 'pending_review'].includes(o.status))
+        const total = myOrders.reduce((s, o) => s + o.totalAmount, 0)
+        const rows: [string, string | undefined][] = [
+          ['公司 / Ragione Sociale', prof?.ragioneSociale],
+          ['P.IVA', prof?.piva],
+          ['税号 / Cod. Fiscale', prof?.codiceFiscale],
+          ['Codice SDI', prof?.codiceSdi],
+          ['PEC', prof?.pec],
+          ['注册手机 / Tel.', prof?.telefono || custDetail.phone],
+          ['邮箱 / Email', prof?.emailOrdini || custDetail.email],
+          ['开票地址', [prof?.indirizzoFattura, prof?.capFattura, prof?.cittaFattura, prof?.provinciaFattura].filter(Boolean).join(' ')],
+          ['收货地址', [prof?.indirizzoSpedizione, prof?.capSpedizione, prof?.cittaSpedizione].filter(Boolean).join(' ')],
+          ['收货备注', prof?.noteConsegna],
+        ]
+        return (
+          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" onClick={() => setCustDetail(null)}>
+            <div className="bg-white rounded-2xl w-full max-w-lg max-h-[90vh] flex flex-col overflow-hidden" onClick={e => e.stopPropagation()}>
+              <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100 shrink-0">
+                <div>
+                  <h3 className="font-bold text-gray-800">{prof?.ragioneSociale || custDetail.name}</h3>
+                  <div className="text-xs text-gray-500">注册名：{custDetail.name}</div>
+                </div>
+                <button onClick={() => setCustDetail(null)} className="w-8 h-8 rounded-full hover:bg-gray-100 flex items-center justify-center text-gray-500"><X className="w-4 h-4" strokeWidth={2} /></button>
+              </div>
+              <div className="overflow-y-auto p-5">
+                <div className="bg-orange-50 rounded-xl p-4 mb-4 flex items-center justify-between">
+                  <span className="text-sm text-gray-600">累计消费（{myOrders.length} 单）</span>
+                  <span className="text-2xl font-bold text-orange-500">€{total.toFixed(2)}</span>
+                </div>
+                {!prof && <div className="text-sm text-gray-500 bg-gray-50 rounded-lg p-3 mb-4">该客户尚未填写开票资料。</div>}
+                <dl className="divide-y divide-gray-100">
+                  {rows.filter(([, v]) => (v || '').trim()).map(([label, value], i) => (
+                    <div key={i} className="flex justify-between gap-4 py-2">
+                      <dt className="text-xs text-gray-500 shrink-0 pt-0.5">{label}</dt>
+                      <dd className="text-sm text-gray-900 font-medium text-right break-all">{value}</dd>
+                    </div>
+                  ))}
+                </dl>
+                {myOrders.length > 0 && (
+                  <div className="mt-4">
+                    <div className="text-xs font-semibold text-gray-500 mb-2">最近订单</div>
+                    <div className="space-y-1.5">
+                      {myOrders.slice(0, 8).map(o => (
+                        <button key={o.id} onClick={() => { setCustDetail(null); openPreview(o) }}
+                          className="w-full flex items-center justify-between text-sm py-1.5 px-2 rounded-lg hover:bg-gray-50 text-left">
+                          <span className="text-gray-600">{o.orderNo}<span className="text-gray-400 ml-2">{new Date(o.createdAt).toLocaleDateString('zh-CN')}</span></span>
+                          <span className="font-medium text-orange-500">€{o.totalAmount.toFixed(2)}</span>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        )
+      })()}
     </div>
   )
 }

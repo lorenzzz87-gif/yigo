@@ -200,6 +200,27 @@ export const store = {
     const { data } = await supabase.from('users').select('*')
     return (data || []).map(toUser)
   },
+  // 本批发商下的所有商家（buyer）
+  async getBuyers(wholesalerId: string): Promise<User[]> {
+    const { data } = await supabase.from('users').select('*').eq('wholesaler_id', wholesalerId).eq('role', 'buyer')
+    return (data || []).map(toUser)
+  },
+  // 批量取多个商家的开票资料
+  async getBuyerProfiles(userIds: string[]): Promise<Record<string, BuyerProfile>> {
+    if (userIds.length === 0) return {}
+    const { data } = await supabase.from('buyer_profiles').select('*').in('user_id', userIds)
+    const map: Record<string, BuyerProfile> = {}
+    for (const d of data || []) {
+      map[d.user_id] = {
+        userId: d.user_id, ragioneSociale: d.ragione_sociale, piva: d.piva, codiceFiscale: d.codice_fiscale,
+        indirizzoFattura: d.indirizzo_fattura, capFattura: d.cap_fattura, cittaFattura: d.citta_fattura,
+        provinciaFattura: d.provincia_fattura, codiceSdi: d.codice_sdi, pec: d.pec,
+        indirizzoSpedizione: d.indirizzo_spedizione, capSpedizione: d.cap_spedizione, cittaSpedizione: d.citta_spedizione,
+        noteConsegna: d.note_consegna, emailOrdini: d.email_ordini, telefono: d.telefono,
+      }
+    }
+    return map
+  },
   async loginByPhone(phoneOrEmail: string, password: string): Promise<User | null> {
     const val = phoneOrEmail.trim()
     const isEmail = val.includes('@')
