@@ -273,7 +273,8 @@ export const store = {
       note_consegna: p.noteConsegna || null, email_ordini: p.emailOrdini || null,
       telefono: p.telefono || null,
     }
-    await supabase.from('buyer_profiles').upsert(row, { onConflict: 'user_id' })
+    const { error } = await supabase.from('buyer_profiles').upsert(row, { onConflict: 'user_id' })
+    if (error) throw new Error('资料保存失败: ' + error.message)
   },
 
   // Image upload to Supabase Storage (returns public URL)

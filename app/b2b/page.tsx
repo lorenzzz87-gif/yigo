@@ -175,7 +175,13 @@ export default function B2BPage() {
     setShowProfileErrors(false)
     setProfileSaving(true)
     const saved = { userId: user.id, ...profileForm }
-    await store.saveBuyerProfile(saved)
+    try {
+      await store.saveBuyerProfile(saved)
+    } catch (e: any) {
+      setProfileSaving(false)
+      showToast((lang === 'it' ? 'Errore nel salvataggio: ' : '保存失败：') + (e?.message || ''))
+      return
+    }
     setProfile(saved)
     setProfileSaving(false)
     setProfileLocked(true)
