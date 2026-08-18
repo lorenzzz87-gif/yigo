@@ -160,15 +160,6 @@ function save(key: string, value: unknown) {
   localStorage.setItem(key, JSON.stringify(value))
 }
 
-function toUser(r: Record<string, any>): User {
-  return {
-    id: r.id, name: r.name, role: r.role as Role, phone: r.phone,
-    email: r.email || undefined,
-    wholesalerId: r.wholesaler_id || undefined,
-    commissionRate: r.commission_rate != null ? Number(r.commission_rate) : undefined,
-  }
-}
-
 function toProduct(row: Record<string, unknown>): Product {
   return {
     id: row.id as string,
@@ -195,62 +186,30 @@ export const store = {
   getCurrentUser(): User | null { return load('yg_current_user', null) },
   setCurrentUser(user: User | null) { save('yg_current_user', user) },
 
-  // Users
+  // Users — sensitive table (passwords). Accessed only via server /api routes.
   async getUsers(): Promise<User[]> {
-    const { data } = await supabase.from('users').select('*')
-    return (data || []).map(toUser)
+    const r = await fetch('/api/users').then(res => res.json()).catch(() => ({ users: [] }))
+    return r.users || []
   },
   // 本批发商下的所有商家（buyer）
   async getBuyers(wholesalerId: string): Promise<User[]> {
-    const { data } = await supabase.from('users').select('*').eq('wholesaler_id', wholesalerId).eq('role', 'buyer')
-    return (data || []).map(toUser)
+    const r = await fetch(`/api/users?wholesalerId=${encodeURIComponent(wholesalerId)}&role=buyer`).then(res => res.json()).catch(() => ({ users: [] }))
+    return r.users || []
   },
   // 批量取多个商家的开票资料
   async getBuyerProfiles(userIds: string[]): Promise<Record<string, BuyerProfile>> {
     if (userIds.length === 0) return {}
-    const { data } = await supabase.from('buyer_profiles').select('*').in('user_id', userIds)
-    const map: Record<string, BuyerProfile> = {}
-    for (const d of data || []) {
-      map[d.user_id] = {
-        userId: d.user_id, ragioneSociale: d.ragione_sociale, piva: d.piva, codiceFiscale: d.codice_fiscale,
-        indirizzoFattura: d.indirizzo_fattura, capFattura: d.cap_fattura, cittaFattura: d.citta_fattura,
-        provinciaFattura: d.provincia_fattura, codiceSdi: d.codice_sdi, pec: d.pec,
-        indirizzoSpedizione: d.indirizzo_spedizione, capSpedizione: d.cap_spedizione, cittaSpedizione: d.citta_spedizione,
-        noteConsegna: d.note_consegna, emailOrdini: d.email_ordini, telefono: d.telefono,
-      }
-    }
-    return map
+    const r = await fetch('/api/buyer-profiles', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ userIds }) }).then(res => res.json()).catch(() => ({ map: {} }))
+    return r.map || {}
   },
   async loginByPhone(phoneOrEmail: string, password: string): Promise<User | null> {
-    const val = phoneOrEmail.trim()
-    const isEmail = val.includes('@')
-    const field = isEmail ? 'email' : 'phone'
-    const { data } = await supabase.from('users').select('*').eq(field, val).eq('password', password).maybeSingle()
-    if (!data) return null
-    return toUser(data)
+    const r = await fetch('/api/login', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ loginValue: phoneOrEmail, password }) }).then(res => res.json()).catch(() => ({ user: null }))
+    return r.user || null
   },
   async registerBuyer(name: string, phone: string, password: string, code: string, tempPassword: string, email?: string): Promise<{ ok: boolean; msg: string }> {
-    const { data: inv } = await supabase.from('invites').select('*').eq('code', code.trim()).maybeSingle()
-    if (!inv) return { ok: false, msg: '商家号不存在，请向批发商索取' }
-    if (inv.temp_password !== tempPassword.trim()) return { ok: false, msg: '临时密码错误' }
-    if (inv.used) return { ok: false, msg: '该商家号已被使用，请向批发商索取新的' }
-    if (new Date(inv.expires_at).getTime() < Date.now()) return { ok: false, msg: '商家号已过期（超过2天），请向批发商索取新的' }
-    if (phone.trim()) {
-      const { data: ex } = await supabase.from('users').select('id').eq('phone', phone.trim()).maybeSingle()
-      if (ex) return { ok: false, msg: '该手机号已注册' }
-    }
-    if (email?.trim()) {
-      const { data: ex } = await supabase.from('users').select('id').eq('email', email.trim()).maybeSingle()
-      if (ex) return { ok: false, msg: '该邮箱已注册' }
-    }
-    const id = `u${Date.now()}`
-    const row: Record<string, any> = { id, name, password, role: 'buyer', wholesaler_id: inv.wholesaler_id }
-    if (phone.trim()) row.phone = phone.trim()
-    if (email?.trim()) row.email = email.trim().toLowerCase()
-    const { error } = await supabase.from('users').insert(row)
-    if (error) return { ok: false, msg: '注册失败，请重试' }
-    await supabase.from('invites').update({ used: true, used_by: id }).eq('code', inv.code)
-    return { ok: true, msg: '' }
+    return await fetch('/api/register', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name, phone, password, code, tempPassword, email }) })
+      .then(res => res.json())
+      .catch(() => ({ ok: false, msg: '注册失败，请重试' }))
   },
 
   // Wholesaler logo — remove white background via canvas, upload to Storage
@@ -269,33 +228,13 @@ export const store = {
   },
 
   async getBuyerProfile(userId: string): Promise<BuyerProfile | null> {
-    const { data } = await supabase.from('buyer_profiles').select('*').eq('user_id', userId).maybeSingle()
-    if (!data) return null
-    return {
-      userId: data.user_id,
-      ragioneSociale: data.ragione_sociale, piva: data.piva, codiceFiscale: data.codice_fiscale,
-      indirizzoFattura: data.indirizzo_fattura, capFattura: data.cap_fattura,
-      cittaFattura: data.citta_fattura, provinciaFattura: data.provincia_fattura,
-      codiceSdi: data.codice_sdi, pec: data.pec,
-      indirizzoSpedizione: data.indirizzo_spedizione, capSpedizione: data.cap_spedizione,
-      cittaSpedizione: data.citta_spedizione, noteConsegna: data.note_consegna,
-      emailOrdini: data.email_ordini, telefono: data.telefono,
-    }
+    const r = await fetch(`/api/profile?userId=${encodeURIComponent(userId)}`).then(res => res.json()).catch(() => ({ profile: null }))
+    return r.profile || null
   },
   async saveBuyerProfile(p: BuyerProfile): Promise<void> {
-    const row = {
-      user_id: p.userId,
-      ragione_sociale: p.ragioneSociale || null, piva: p.piva || null,
-      codice_fiscale: p.codiceFiscale || null, indirizzo_fattura: p.indirizzoFattura || null,
-      cap_fattura: p.capFattura || null, citta_fattura: p.cittaFattura || null,
-      provincia_fattura: p.provinciaFattura || null, codice_sdi: p.codiceSdi || null,
-      pec: p.pec || null, indirizzo_spedizione: p.indirizzoSpedizione || null,
-      cap_spedizione: p.capSpedizione || null, citta_spedizione: p.cittaSpedizione || null,
-      note_consegna: p.noteConsegna || null, email_ordini: p.emailOrdini || null,
-      telefono: p.telefono || null,
-    }
-    const { error } = await supabase.from('buyer_profiles').upsert(row, { onConflict: 'user_id' })
-    if (error) throw new Error('资料保存失败: ' + error.message)
+    const r = await fetch('/api/profile', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ profile: p }) })
+    const j = await r.json().catch(() => ({ ok: false, error: 'network' }))
+    if (!r.ok || !j.ok) throw new Error('资料保存失败: ' + (j.error || r.status))
   },
 
   // Image upload to Supabase Storage (returns public URL)
@@ -328,15 +267,9 @@ export const store = {
     return (data || []).map(r => ({ id: r.id, name: r.name, contact: r.contact || undefined, status: (r.status || 'active') as Wholesaler['status'], createdAt: r.created_at }))
   },
   async addWholesaler(name: string, contact: string, phone: string, password: string): Promise<{ ok: boolean; msg: string }> {
-    const { data: existing } = await supabase.from('users').select('id').eq('phone', phone.trim()).maybeSingle()
-    if (existing) return { ok: false, msg: '该登录手机号已被占用' }
-    const wid = `w${Date.now()}`
-    const { error: e1 } = await supabase.from('wholesalers').insert({ id: wid, name, contact: contact || phone.trim(), status: 'active' })
-    if (e1) return { ok: false, msg: '创建批发商失败' }
-    const uid = `u${Date.now()}`
-    const { error: e2 } = await supabase.from('users').insert({ id: uid, name, role: 'wholesaler', phone: phone.trim(), password, wholesaler_id: wid })
-    if (e2) return { ok: false, msg: '创建登录账号失败' }
-    return { ok: true, msg: '' }
+    return await fetch('/api/wholesalers', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name, contact, phone, password }) })
+      .then(res => res.json())
+      .catch(() => ({ ok: false, msg: '创建批发商失败' }))
   },
   async updateWholesalerStatus(id: string, status: Wholesaler['status']) {
     await supabase.from('wholesalers').update({ status }).eq('id', id)
