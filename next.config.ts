@@ -26,6 +26,15 @@ const nextConfig: NextConfig = {
           source: '/suvoo/:path((?!.*\\..+$).*)',
           destination: '/suvoo/index.html',
         },
+        // TEKONE 进销存 · 面单核对（B 公司独立实例，同静态应用不同命名空间+后端）
+        {
+          source: '/tekone',
+          destination: '/tekone/index.html',
+        },
+        {
+          source: '/tekone/:path((?!.*\\..+$).*)',
+          destination: '/tekone/index.html',
+        },
         // SUVOO-出库管理系统：跑在 Cloudflare Worker 上（D1 + R2），这里只做反向代理。
         // 前缀在转发时被吃掉，Worker 收到的是 /api/... 和 /assets/...
         {

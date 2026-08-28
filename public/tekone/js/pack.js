@@ -1,0 +1,639 @@
+/* ============================================================
+   SUVOO 进销存 — 扫码打包台
+   单输入框自动分流：空闲时扫面单开包裹，进行中扫商品条码装箱。
+   智能混合：单件订单扫面单直接出库；多件订单逐件核对防装错。
+   进度存于订单 packing 字段 → 随订单行级同步上云，可换设备接力。
+   ============================================================ */
+
+const packState = {
+  currentOrderId: null,
+  session: [],  // {at, code, result, orderId}  result: fast|done|force|wrong|unknown|dupw|undone
+  event: null,  // {kind:'ok'|'warn'|'err'|'info', msg}  最近一次扫描反馈
+  dims: { l: '', w: '', h: '', kg: '' }, // 包裹长宽厚重（选填），出库时附到订单
+  lastContents: null, // {kind:'fast'|'done', no, items:[{sku,name,qty}]} 最近出库包裹内容（大字显示给打包员）
+  confirmSingle: null // 单件订单尺寸确认态 {orderId, sku, name, productId, hadDims, notice}
+};
+
+function rememberContents(o, kind) {
+  packState.lastContents = { kind, no: o.trackingNo || o.orderNo || '', items: packRequired(o) };
+}
+
+// 记录「刷单时间」：打包工位首次扫到该单开始处理的时刻（随订单同步上云）
+function markScan(o) { if (o && !o.scanAt) o.scanAt = Date.now(); }
+
+/* ---------- 面单打印助手（本工位局域打印，见 print-agent/安装说明） ---------- */
+async function agentPrint(no) {
+  if (DB.settings.printAgent !== true || !no) return;
+  const base = (DB.settings.printAgentUrl || 'http://127.0.0.1:17777').replace(/\/$/, '');
+  try {
+    const res = await fetch(base + '/print?no=' + encodeURIComponent(no), { signal: AbortSignal.timeout(10000) });
+    const d = await res.json().catch(() => ({}));
+    if (res.ok) toast(t('面单已发送打印：{no}', { no }), 'success');
+    else if (d.error === 'not_found') toast(t('打印助手：面单文件夹里没找到 {no}', { no }), 'warn');
+    else toast(t('面单打印失败:{msg}', { msg: d.error || res.status }), 'error');
+  } catch (e) {
+    toast(t('打印助手未运行或无法连接，请在打包电脑启动 start.bat'), 'warn');
+  }
+}
+
+// 解析输入框里的尺寸重量（>0 才取，否则空）
+function parseDims() {
+  const d = packState.dims;
+  const n = v => { const x = parseFloat(v); return isFinite(x) && x > 0 ? x : ''; };
+  return { l: n(d.l), w: n(d.w), h: n(d.h), kg: n(d.kg) };
+}
+// 出库时把选填的尺寸/重量附到订单（随订单行同步上云），然后清空输入
+function attachParcel(o) {
+  const p = parseDims();
+  if (p.l !== '' || p.w !== '' || p.h !== '' || p.kg !== '') o.parcel = p;
+  packState.dims = { l: '', w: '', h: '', kg: '' };
+}
+
+/* ---------- 单件订单尺寸确认（按 SKU 记忆长宽高重） ---------- */
+// 单件（1 个 SKU × 1 件）扫单后进入确认态：带出该 SKU 存过的尺寸供确认/修改
+function enterConfirmSingle(o, line, notice) {
+  const p = line.sku ? productByCode(line.sku) : null;
+  const d = (p && p.dims) ? p.dims : {};
+  const has = !!(p && p.dims && (p.dims.l || p.dims.w || p.dims.h || p.dims.kg));
+  packState.dims = { l: d.l ?? '', w: d.w ?? '', h: d.h ?? '', kg: d.kg ?? '' };
+  packState.confirmSingle = { orderId: o.id, sku: line.sku, name: line.name, productId: p ? p.id : null, hadDims: has, notice: notice || '' };
+  packEvt('info', has
+    ? t('已带出该商品上次尺寸，确认或修改后点「确认出库」') + (notice || '')
+    : t('请填写该商品尺寸重量，点「确认出库」保存') + (notice || ''));
+  playBeep('tick');
+}
+// 确认出库：尺寸覆盖写回 SKU，附到订单，出库
+function confirmSinglePack() {
+  const cs = packState.confirmSingle;
+  if (!cs) return;
+  const o = DB.orders.find(x => x.id === cs.orderId);
+  packState.confirmSingle = null;
+  if (!o) { packState.dims = { l: '', w: '', h: '', kg: '' }; return; }
+  const parcel = parseDims();
+  if (cs.productId) {
+    const p = DB.products.find(x => x.id === cs.productId);
+    if (p) p.dims = parcel; // 覆盖该 SKU 的记忆尺寸（随云同步）
+  }
+  if (parcel.l !== '' || parcel.w !== '' || parcel.h !== '' || parcel.kg !== '') o.parcel = parcel;
+  packState.dims = { l: '', w: '', h: '', kg: '' };
+  rememberContents(o, 'fast');
+  verifyOrder(o); // 内部 save() + 同步（含商品 dims 变更）
+  agentPrint(o.trackingNo);
+  packLog(o.trackingNo || o.orderNo || '', 'fast', o.id);
+  packEvt('ok', t('已出库并记住该商品尺寸：{no}', { no: o.trackingNo || o.orderNo }));
+  playBeep('ok');
+}
+function abandonConfirmSingle() {
+  packState.confirmSingle = null;
+  packState.dims = { l: '', w: '', h: '', kg: '' };
+  packEvt('info', t('已放弃，未出库'));
+}
+
+function packCurrent() {
+  return packState.currentOrderId
+    ? DB.orders.find(o => o.id === packState.currentOrderId) || null
+    : null;
+}
+function packEvt(kind, msg) { packState.event = { kind, msg }; }
+function packLog(code, result, orderId = null) {
+  packState.session.unshift({ at: Date.now(), code, result, orderId });
+  if (packState.session.length > 500) packState.session.length = 500;
+}
+function focusPack() {
+  const i = document.getElementById('packInput');
+  if (i) { i.value = ''; i.focus(); }
+}
+
+/* ---------- 扫描分流 ---------- */
+function handlePackScan(code) {
+  code = String(code || '').trim();
+  if (!code) return;
+  // 单件尺寸确认态：再扫同一面单=确认出库；扫别的先拦住
+  if (packState.confirmSingle) {
+    const cs = packState.confirmSingle;
+    const o = DB.orders.find(x => x.id === cs.orderId);
+    if (o && (normCode(code) === normCode(o.trackingNo) || normCode(code) === normCode(o.orderNo))) {
+      confirmSinglePack();
+    } else {
+      packEvt('warn', t('请先点「确认出库」或「放弃」处理当前包裹'));
+      playBeep('dup');
+    }
+    render(); focusPack(); return;
+  }
+  const cur = packCurrent();
+  if (!cur) handlePackWaybill(code);
+  else handlePackItem(cur, code);
+  render();
+  focusPack();
+}
+
+// 空闲状态：这一枪是面单（或商品条码 → 自动匹配待发订单）
+function handlePackWaybill(code) {
+  const o = orderByCode(code);
+  if (!o) {
+    const p = productByCode(code);
+    if (p) return handleProductEntry(p, code);
+    packEvt('err', t('未找到该单号：{code}（订单可能未导入）', {code}));
+    packLog(code, 'unknown');
+    playBeep('err');
+    return;
+  }
+  if (o.status === 'verified') {
+    packEvt('warn', t('该单已于 {time} 出库，请勿重复发货！', {time: fmtDT(o.verifiedAt)}));
+    packLog(code, 'dupw', o.id);
+    playBeep('dup');
+    return;
+  }
+  const req = packRequired(o);
+  const total = req.reduce((s, l) => s + l.qty, 0);
+  // 单件订单（1 个 SKU × 1 件）：进入尺寸确认态，按 SKU 记忆长宽高重
+  if (req.length === 1 && total === 1 && DB.settings.packSingleFast !== false) {
+    markScan(o);
+    enterConfirmSingle(o, req[0], '');
+    return;
+  }
+  // 无明细 / 关闭逐件核对 / 关闭单件确认的单件 → 直接出库
+  if (!req.length || DB.settings.packVerifyItems === false || total <= 1) {
+    markScan(o);
+    attachParcel(o);
+    rememberContents(o, 'fast');
+    verifyOrder(o);
+    packEvt('ok', t(total <= 1 ? '单件订单，已直接完成出库：{no}' : '已直接完成出库：{no}', {no: o.trackingNo || o.orderNo}));
+    packLog(code, 'fast', o.id);
+    playBeep('ok');
+    agentPrint(o.trackingNo);
+    return;
+  }
+  const resume = !!o.packing;
+  if (!o.packing) {
+    markScan(o);
+    o.packing = { startedAt: Date.now(), packed: {}, updatedAt: Date.now() };
+    save();
+  }
+  packState.currentOrderId = o.id;
+  if (!resume) agentPrint(o.trackingNo);
+  const tot = packTotals(o);
+  packEvt('info', resume
+    ? t('继续打包（此前已装 {done}/{total} 件），请扫商品条码', {done: tot.done, total: tot.total})
+    : t('开始打包，共 {total} 件，请逐件扫商品条码装箱', {total: tot.total}));
+  playBeep('tick');
+}
+
+// 空闲时扫商品条码：匹配含该商品的待发订单（优先单商品行订单，最早优先）
+function handleProductEntry(p, code) {
+  const ks = normCode(p.sku), kb = normCode(p.barcode);
+  const matches = DB.orders.filter(o =>
+    o.status === 'pending' &&
+    packRequired(o).some(l => l.key === ks || (kb && l.key === kb)));
+  if (!matches.length) {
+    packEvt('warn', t('商品【{name}】没有待发订单', { name: p.name }));
+    packLog(code, 'unknown');
+    playBeep('dup');
+    return;
+  }
+  const singleLine = matches.filter(o => packRequired(o).length === 1);
+  const pool = singleLine.length ? singleLine : matches;
+  const target = pool.slice().sort((a2, b2) => (a2.createdAt || 0) - (b2.createdAt || 0))[0];
+  const notice = matches.length > 1 ? t('（该商品有 {n} 个待发订单，已按最早优先）', { n: matches.length }) : '';
+
+  const req = packRequired(target);
+  const total = req.reduce((sum, l) => sum + l.qty, 0);
+  // 单件订单（1 个 SKU × 1 件）：进入尺寸确认态，按 SKU 记忆
+  if (req.length === 1 && total === 1 && DB.settings.packSingleFast !== false) {
+    markScan(target);
+    enterConfirmSingle(target, req[0], notice);
+    return;
+  }
+  // 无明细 / 关闭逐件核对 / 关闭单件确认的单件 → 扫商品直接出库
+  if (DB.settings.packVerifyItems === false || total <= 1) {
+    markScan(target);
+    attachParcel(target);
+    rememberContents(target, 'fast');
+    verifyOrder(target);
+    packEvt('ok', t('扫商品匹配订单 {no}，已直接出库', { no: target.trackingNo || target.orderNo }) + notice);
+    packLog(code, 'fast', target.id);
+    playBeep('ok');
+    agentPrint(target.trackingNo);
+    return;
+  }
+  // 多件订单：打开装箱，并把手里这件计为已装 1 件
+  const resume = !!target.packing;
+  if (!target.packing) { markScan(target); target.packing = { startedAt: Date.now(), packed: {}, updatedAt: Date.now() }; }
+  packState.currentOrderId = target.id;
+  if (!resume) agentPrint(target.trackingNo);
+  const line = req.find(l => l.key === ks || (kb && l.key === kb));
+  const done = packedCount(target, line.key);
+  if (done < line.qty) {
+    target.packing.packed[line.key] = done + 1;
+    target.packing.updatedAt = Date.now();
+    if (packIsComplete(target)) { completePack(target, false); return; }
+    save();
+    packEvt('ok', t('扫商品打开订单 {no}，已装 {name}（{n}/{qty}）', { no: target.trackingNo || target.orderNo, name: line.name, n: done + 1, qty: line.qty }) + notice);
+  } else {
+    save();
+    packEvt('info', t('已打开订单 {no}，请扫商品条码装箱', { no: target.trackingNo || target.orderNo }) + notice);
+  }
+  playBeep('tick');
+}
+
+// 打包中：这一枪是商品条码
+function handlePackItem(cur, code) {
+  const c = normCode(code);
+  // 重复扫了当前面单
+  if (c === normCode(cur.trackingNo) || c === normCode(cur.orderNo)) {
+    packEvt('info', t('当前包裹正在打包中，请扫商品条码'));
+    playBeep('tick');
+    return;
+  }
+  const req = packRequired(cur);
+  // 匹配应装清单：明细 key 直配，或经商品库 SKU/条码转换
+  let line = req.find(l => l.key === c);
+  let known = null;
+  if (!line) {
+    known = productByCode(code);
+    if (known) {
+      const ks = normCode(known.sku), kb = normCode(known.barcode);
+      line = req.find(l => l.key === ks || (kb && l.key === kb));
+    }
+  }
+  if (line) {
+    const done = packedCount(cur, line.key);
+    if (done >= line.qty) {
+      packEvt('warn', t('【{name}】已装满 {qty} 件，请勿多装！', {name: line.name, qty: line.qty}));
+      playBeep('dup');
+      return;
+    }
+    cur.packing.packed[line.key] = done + 1;
+    cur.packing.updatedAt = Date.now();
+    if (packIsComplete(cur)) {
+      completePack(cur, false);
+    } else {
+      save();
+      packEvt('ok', t('已装 {name}（{n}/{qty}）', {name: line.name, n: done + 1, qty: line.qty}));
+      playBeep('tick');
+    }
+    return;
+  }
+  if (known) {
+    packEvt('err', t('装错了！【{name}】不在本单，请取出', {name: known.name}));
+    packLog(code, 'wrong', cur.id);
+    playBeep('err');
+    return;
+  }
+  // 是不是误扫了另一张面单？
+  const other = orderByCode(code);
+  if (other) {
+    packEvt('warn', t('这是另一张面单。请先完成或暂停当前包裹，再扫新面单'));
+    playBeep('err');
+    return;
+  }
+  packEvt('err', t('未知条码：{code}（不在本单，也不在商品库）', {code}));
+  packLog(code, 'unknown', cur.id);
+  playBeep('err');
+}
+
+function completePack(o, forced) {
+  attachParcel(o);
+  rememberContents(o, 'done');
+  verifyOrder(o); // 内部会清除 packing 并扣库存
+  packState.currentOrderId = null;
+  packLog(o.trackingNo || o.orderNo || '', forced ? 'force' : 'done', o.id);
+  packEvt('ok', t(forced ? '打包完成，已出库：{no}（缺件强制完成）' : '打包完成，已出库：{no}', {no: o.trackingNo || o.orderNo}));
+  playBeep('ok');
+}
+
+/* ---------- Excel 导出 ---------- */
+function exportPackXLSX(days = 0) {
+  const cutoff = days > 0 ? Date.now() - days * 86400e3 : 0;
+  const verified = DB.orders.filter(o => o.status === 'verified' && (!cutoff || (o.verifiedAt || 0) >= cutoff))
+    .sort((a, b) => (b.verifiedAt || 0) - (a.verifiedAt || 0));
+  const pending = DB.orders.filter(o => o.status === 'pending')
+    .sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
+  const pv = (o, k) => (o.parcel && o.parcel[k] !== '' && o.parcel[k] != null) ? o.parcel[k] : '';
+  exportXLSX(`打包数据_${days > 0 ? '近' + days + '天_' : ''}${dayKey(Date.now())}.xlsx`, [
+    {
+      name: '打包出库',
+      rows: [['刷单时间', '出库时间', '交接时间', '交接物流', '渠道', '订单号', '运单号', '收件人', '商品明细', '件数', '长(cm)', '宽(cm)', '厚(cm)', '重量(kg)', '备注'],
+        ...verified.map(o => [fmtFull(o.scanAt || o.verifiedAt), fmtFull(o.verifiedAt), fmtFull(o.sortedAt), o.sortedCarrier || o.carrier || '', o.channel || '', o.orderNo || '', o.trackingNo || '',
+          o.receiver || '', orderItemsSummary(o), orderPieces(o),
+          pv(o, 'l'), pv(o, 'w'), pv(o, 'h'), pv(o, 'kg'), o.note || ''])]
+    },
+    {
+      name: '待打包',
+      rows: [['创建时间', '渠道', '订单号', '运单号', '收件人', '商品明细', '件数', '打包进度', '备注'],
+        ...pending.map(o => {
+          const tot = packTotals(o);
+          return [fmtFull(o.createdAt), o.channel || '', o.orderNo || '', o.trackingNo || '',
+            o.receiver || '', orderItemsSummary(o), tot.total,
+            o.packing ? `打包中 ${tot.done}/${tot.total}` : (tot.total <= 1 ? '单件直发' : '待打包'), o.note || ''];
+        })]
+    }
+  ]);
+}
+
+/* ---------- 最近出库包裹内容（大字，给打包员看） ---------- */
+function packLastHTML() {
+  const L = packState.lastContents;
+  if (!L) {
+    return `<div class="scan-result"><div class="res-idle">${icon('pack', 32)}<span>等待扫描面单…</span></div></div>`;
+  }
+  const head = L.kind === 'fast'
+    ? t('单件直发 {no} · 请装入：', { no: L.no })
+    : t('已出库 {no} · 包裹内容：', { no: L.no });
+  return `<div class="pk-last">
+    <div class="pk-last-head">${icon('check', 18)}${esc(head)}
+      ${DB.settings.printAgent && L.no ? `<button class="btn btn-sm" data-pk-reprint="${esc(L.no)}" title="重打面单">${icon('printer', 13)}</button>` : ''}</div>
+    ${L.items.length
+      ? L.items.map(it => `<div class="pk-last-row">
+          <div class="pk-last-main">
+            ${it.name && it.name !== it.sku ? `<span class="pk-last-name">${esc(it.name)}</span>` : ''}
+            <span class="pk-last-sku mono">${esc(it.sku || it.name)}</span>
+          </div>
+          <span class="pk-last-qty">×${it.qty}</span>
+        </div>`).join('')
+      : `<p class="small dim">${esc(t('（无商品明细）'))}</p>`}
+  </div>`;
+}
+
+// 单件尺寸确认卡片
+function packConfirmSingleHTML(cs) {
+  return `<div class="pk-last" style="border-color:var(--warn);background:var(--warn-weak)">
+    <div class="pk-last-head" style="color:#B45309">${icon('pack', 18)}${esc(t('单件出库 · 请确认尺寸重量'))}</div>
+    <div class="pk-last-row"><div class="pk-last-main">
+      ${cs.name && cs.name !== cs.sku ? `<span class="pk-last-name">${esc(cs.name)}</span>` : ''}
+      <span class="pk-last-sku mono">${esc(cs.sku || cs.name)}</span>
+    </div></div>
+    <p class="small dim">${cs.hadDims
+      ? esc(t('↑ 已带出该商品上次尺寸，如有变化直接改（确认后覆盖记录）'))
+      : esc(t('↑ 请在上方填写该商品尺寸重量，确认后记到该商品'))}</p>
+    <div class="flex" style="flex-wrap:wrap">
+      <button class="btn btn-accent" data-pk-confirm-single>${icon('check', 15)}${t('确认出库')}</button>
+      <button class="btn" data-pk-abandon-single>${t('放弃')}</button>
+    </div>
+  </div>`;
+}
+
+/* ---------- 页面 ---------- */
+function packEventHTML() {
+  const e = packState.event;
+  if (!e) return '';
+  const ic = { ok: 'check', warn: 'alert', err: 'x', info: 'info' }[e.kind];
+  return `<div class="pk-event ${e.kind}">${icon(ic, 16)}<span>${esc(e.msg)}</span></div>`;
+}
+
+function packChecklistHTML(o) {
+  const req = packRequired(o);
+  const tot = packTotals(o);
+  return `
+    <div class="pk-head">
+      ${channelBadge(o.channel)}
+      <span class="pk-track">${esc(o.trackingNo || o.orderNo || '')}</span>
+      ${DB.settings.printAgent ? `<button class="btn btn-sm" data-pk-reprint="${esc(o.trackingNo || o.orderNo || '')}" title="重打面单">${icon('printer', 13)}</button>` : ''}
+      ${o.receiver ? `<span class="dim small"><span>收件</span> ${esc(o.receiver)}</span>` : ''}
+      ${o.note ? `<span class="muted small"><span>备注：</span>${esc(o.note)}</span>` : ''}
+    </div>
+    <div class="pk-list">
+      ${req.map(l => {
+        const done = packedCount(o, l.key);
+        const full = done >= l.qty;
+        const p = productByCode(l.sku);
+        return `<div class="pk-row ${full ? 'full' : ''}">
+          <div class="pk-name"><b>${esc(l.name)}</b>
+            <span class="mono muted">${esc(l.sku)}${p && p.barcode ? ' · ' + esc(p.barcode) : ''}</span></div>
+          <div class="pk-bar"><i style="width:${Math.min(100, done / l.qty * 100)}%"></i></div>
+          <div class="pk-qty">${done}/${l.qty}</div>
+          <div class="row-actions">
+            <button class="btn btn-sm btn-ghost" data-pk-minus="${esc(l.key)}" title="误扫回退" ${done ? '' : 'disabled'}>−1</button>
+            <button class="btn btn-sm" data-pk-plus="${esc(l.key)}" title="无条码商品手动装箱" ${full ? 'disabled' : ''}>+1</button>
+          </div>
+        </div>`;
+      }).join('')}
+    </div>
+    <div class="pk-total">
+      <b>${tot.done} / ${tot.total} 件</b>
+      <div class="pk-bar"><i style="width:${tot.total ? Math.min(100, tot.done / tot.total * 100) : 0}%"></i></div>
+    </div>
+    <div class="flex" style="flex-wrap:wrap">
+      <button class="btn btn-accent" data-pk-finish>${icon('check', 15)}完成打包出库</button>
+      <button class="btn" data-pk-pause>${icon('undo', 15)}暂停 / 换单</button>
+      <button class="btn btn-ghost" data-pk-reset>清除进度</button>
+    </div>`;
+}
+
+const PACK_RESULT_LABEL = {
+  fast: '<span class="scan-log-result sl-ok">✓ 单件直发</span>',
+  done: '<span class="scan-log-result sl-ok">✓ 完成</span>',
+  force: '<span class="scan-log-result sl-dup">强制完成</span>',
+  wrong: '<span class="scan-log-result sl-err">装错商品</span>',
+  unknown: '<span class="scan-log-result sl-err">未知码</span>',
+  dupw: '<span class="scan-log-result sl-dup">已出库</span>',
+  undone: '<span class="muted">已撤销</span>'
+};
+
+function renderPack(el) {
+  const cur = packCurrent();
+  const pending = DB.orders.filter(o => o.status === 'pending');
+  const queue = pending
+    .slice()
+    .sort((a, b) => (b.packing ? 1 : 0) - (a.packing ? 1 : 0) || (b.createdAt || 0) - (a.createdAt || 0));
+  const s = packState.session;
+  const doneCnt = s.filter(x => x.result === 'fast' || x.result === 'done' || x.result === 'force').length;
+  const errCnt = s.filter(x => x.result === 'wrong' || x.result === 'unknown').length;
+
+  const d = packState.dims;
+  el.innerHTML = pageHead('扫码打包台', '扫面单开包裹 → 逐件扫商品装箱 → 装齐自动出库；单件订单扫面单直发',
+    `<button class="btn" data-pk-xlsx3>${icon('download', 15)}导出近3天</button>
+     <button class="btn" data-pk-xlsx>${icon('download', 15)}导出全部 Excel</button>`) + `
+    <div class="scan-chips mb-14">
+      <span class="chip">待打包 <b>${pending.length}</b> 单</span>
+      <span class="chip c-green">本次完成 <b>${doneCnt}</b></span>
+      <span class="chip c-red">异常 <b>${errCnt}</b></span>
+      ${cur ? `<span class="chip c-amber">进行中 <b class="mono">${esc(cur.trackingNo || cur.orderNo || '')}</b></span>` : ''}
+      <label class="checkbox-line" style="margin-left:auto"><input type="checkbox" data-pk-beep ${DB.settings.beep ? 'checked' : ''}>提示音</label>
+    </div>
+    <div class="scan-grid">
+      <div>
+        <div class="card">
+          <div class="scan-input-wrap">${icon(cur ? 'barcode' : 'pack', 22)}
+            <input id="packInput" class="scan-input" placeholder="${cur ? '扫商品条码装箱…' : '扫描面单开始打包'}" autocomplete="off" spellcheck="false"></div>
+          <p class="small muted mt-8">${cur
+            ? '逐件扫商品条码 / SKU · 无条码商品点行内 +1 · 装齐自动完成出库'
+            : '扫面单 / 订单号 / 商品条码均可 · 单件直发 · 多件进入装箱核对'}</p>
+          <div class="pk-dims">
+            <span class="small dim">包裹尺寸/重量<span class="muted">（选填，出库时记入订单）</span></span>
+            <input class="input" type="number" min="0" step="0.1" data-dim="l" placeholder="长 cm" value="${esc(d.l)}">
+            <span class="muted">×</span>
+            <input class="input" type="number" min="0" step="0.1" data-dim="w" placeholder="宽 cm" value="${esc(d.w)}">
+            <span class="muted">×</span>
+            <input class="input" type="number" min="0" step="0.1" data-dim="h" placeholder="厚 cm" value="${esc(d.h)}">
+            <input class="input" type="number" min="0" step="0.01" data-dim="kg" placeholder="重 kg" value="${esc(d.kg)}">
+          </div>
+          ${packEventHTML()}
+          ${packState.confirmSingle ? packConfirmSingleHTML(packState.confirmSingle) : cur ? packChecklistHTML(cur) : packLastHTML()}
+        </div>
+        <div class="card mt-14">
+          <div class="card-title">${icon('orders', 16)}打包队列<span class="spacer"></span>
+            <button class="btn btn-sm btn-ghost" onclick="location.hash='#/orders'">全部订单</button></div>
+          ${queue.length ? `<div class="tbl-wrap"><table class="tbl"><thead>
+            <tr><th>渠道</th><th>运单号</th><th>商品</th><th class="num">件数</th><th>进度</th></tr></thead><tbody>
+            ${queue.slice(0, 8).map(o => {
+              const tot = packTotals(o);
+              return `<tr data-pk-open="${o.id}" style="cursor:pointer" title="点击开始/继续打包">
+                <td>${channelBadge(o.channel)}</td>
+                <td class="mono">${esc(o.trackingNo || o.orderNo || '')}</td>
+                <td class="ellip">${esc(orderItemsSummary(o))}</td>
+                <td class="num">${tot.total}</td>
+                <td>${o.packing ? `<span class="badge b-blue">打包中 ${tot.done}/${tot.total}</span>`
+                  : tot.total <= 1 ? '<span class="badge b-gray">单件直发</span>'
+                  : '<span class="badge b-amber">待打包</span>'}</td></tr>`;
+            }).join('')}
+          </tbody></table></div>
+          ${queue.length > 8 ? `<p class="small muted mt-8">仅显示前 8 单，共 ${queue.length} 单待打包</p>` : ''}`
+          : `<p class="muted small">全部订单已打包完毕 ✓</p>`}
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-title">${icon('history', 16)}本次打包记录<span class="spacer"></span>
+          ${s.length ? `<button class="btn btn-sm btn-ghost" data-pk-clear>清空</button>` : ''}</div>
+        ${s.length ? `<div class="tbl-wrap"><table class="tbl"><thead>
+          <tr><th>时间</th><th>单号 / 条码</th><th>结果</th><th></th></tr></thead><tbody>
+          ${s.slice(0, 50).map((x, i) => `<tr>
+            <td class="muted small">${fmtDT(x.at).slice(6)}</td>
+            <td class="mono">${esc(x.code)}</td>
+            <td>${PACK_RESULT_LABEL[x.result] || esc(x.result)}</td>
+            <td style="text-align:right">${(x.result === 'done' || x.result === 'fast' || x.result === 'force')
+              ? `<button class="btn btn-sm btn-ghost" data-pk-undo="${i}" title="撤销出库">${icon('undo', 13)}</button>` : ''}</td>
+          </tr>`).join('')}
+        </tbody></table></div>` : `<p class="muted small" style="padding:12px 0">还没有记录。把光标放在左侧输入框，扫面单即可开始。</p>`}
+      </div>
+    </div>`;
+
+  const input = el.querySelector('#packInput');
+  input.addEventListener('keydown', e => {
+    if (e.key === 'Enter' && !e.isComposing) { e.preventDefault(); handlePackScan(input.value); }
+  });
+  attachAutoScan(input, code => handlePackScan(code));
+  // 单件确认态：焦点给到「长」输入框方便直接量填；否则回到扫描框
+  if (packState.confirmSingle) {
+    setTimeout(() => { const l = el.querySelector('[data-dim="l"]'); (l || input).focus(); l && l.select(); }, 30);
+  } else {
+    setTimeout(() => input.focus(), 30);
+  }
+
+  el.querySelector('[data-pk-beep]').addEventListener('change', e => {
+    DB.settings.beep = e.target.checked;
+    save();
+  });
+  // 尺寸/重量输入（存内存，出库时附单）；确认态下回车=确认出库
+  el.querySelectorAll('[data-dim]').forEach(inp => {
+    inp.addEventListener('input', () => { packState.dims[inp.dataset.dim] = inp.value; });
+    inp.addEventListener('keydown', e => {
+      if (e.key === 'Enter' && packState.confirmSingle) { e.preventDefault(); confirmSinglePack(); render(); focusPack(); }
+    });
+  });
+  el.querySelector('[data-pk-confirm-single]')?.addEventListener('click', () => { confirmSinglePack(); render(); focusPack(); });
+  el.querySelector('[data-pk-abandon-single]')?.addEventListener('click', () => { abandonConfirmSingle(); render(); focusPack(); });
+  el.querySelector('[data-pk-xlsx]').addEventListener('click', () => exportPackXLSX(0));
+  el.querySelector('[data-pk-xlsx3]').addEventListener('click', () => exportPackXLSX(3));
+  el.querySelector('[data-pk-clear]')?.addEventListener('click', () => {
+    packState.session = [];
+    packState.event = null;
+    render();
+  });
+  el.querySelectorAll('[data-pk-reprint]').forEach(btn => btn.addEventListener('click', () => {
+    agentPrint(btn.dataset.pkReprint);
+    focusPack();
+  }));
+
+  // 行内 +1 / −1（无条码兜底、误扫回退）
+  el.querySelectorAll('[data-pk-plus]').forEach(b => b.addEventListener('click', () => {
+    const o = packCurrent();
+    if (!o) return;
+    const key = b.dataset.pkPlus;
+    const line = packRequired(o).find(l => l.key === key);
+    if (!line) return;
+    const done = packedCount(o, key);
+    if (done >= line.qty) return;
+    o.packing.packed[key] = done + 1;
+    o.packing.updatedAt = Date.now();
+    if (packIsComplete(o)) completePack(o, false);
+    else { save(); packEvt('ok', t('已装 {name}（{n}/{qty}）', {name: line.name, n: done + 1, qty: line.qty})); playBeep('tick'); }
+    render(); focusPack();
+  }));
+  el.querySelectorAll('[data-pk-minus]').forEach(b => b.addEventListener('click', () => {
+    const o = packCurrent();
+    if (!o) return;
+    const key = b.dataset.pkMinus;
+    const done = packedCount(o, key);
+    if (done > 0) {
+      o.packing.packed[key] = done - 1;
+      o.packing.updatedAt = Date.now();
+      save();
+      packEvt('info', t('已回退 1 件'));
+    }
+    render(); focusPack();
+  }));
+
+  // 完成 / 暂停 / 清除
+  el.querySelector('[data-pk-finish]')?.addEventListener('click', async () => {
+    const o = packCurrent();
+    if (!o) return;
+    if (packIsComplete(o)) { completePack(o, false); render(); focusPack(); return; }
+    const missing = packRequired(o)
+      .filter(l => packedCount(o, l.key) < l.qty)
+      .map(l => `${esc(l.name)} 还缺 ${l.qty - packedCount(o, l.key)} 件`);
+    const ok = await confirmBox(
+      `包裹还没装齐：<br><b>${missing.join('<br>')}</b><br><span class="muted small">强制完成会按订单全量出库扣减库存。</span>`,
+      { danger: true, okText: '缺件强制完成' });
+    if (ok) { completePack(o, true); render(); }
+    focusPack();
+  });
+  el.querySelector('[data-pk-pause]')?.addEventListener('click', () => {
+    packState.currentOrderId = null;
+    packEvt('info', t('已暂停，进度已保存（云同步后其他设备可继续）'));
+    render(); focusPack();
+  });
+  el.querySelector('[data-pk-reset]')?.addEventListener('click', async () => {
+    const o = packCurrent();
+    if (!o) return;
+    const ok = await confirmBox('清除本单的装箱进度并退出？', { danger: true, okText: '清除' });
+    if (ok) {
+      delete o.packing;
+      save();
+      packState.currentOrderId = null;
+      packEvt('info', t('已清除进度'));
+      render();
+    }
+    focusPack();
+  });
+
+  // 点击队列行开始 / 继续打包（面单破损时用）
+  el.querySelectorAll('[data-pk-open]').forEach(tr => tr.addEventListener('click', () => {
+    const o = DB.orders.find(x => x.id === tr.dataset.pkOpen);
+    if (!o) return;
+    const c = packCurrent();
+    if (c && c.id !== o.id) { toast('请先完成或暂停当前包裹', 'warn'); return; }
+    handlePackWaybill(o.trackingNo || o.orderNo || '');
+    render(); focusPack();
+  }));
+
+  // 撤销出库
+  el.querySelectorAll('[data-pk-undo]').forEach(b => b.addEventListener('click', () => {
+    const entry = packState.session[Number(b.dataset.pkUndo)];
+    const o = entry && DB.orders.find(x => x.id === entry.orderId);
+    if (!o || o.status !== 'verified') { toast('该订单已不可撤销', 'warn'); return; }
+    unverifyOrder(o);
+    entry.result = 'undone';
+    toast('已撤销出库，库存已回补');
+    render(); focusPack();
+  }));
+
+  // 点击空白自动回焦
+  function packFocusGuard(e) {
+    if (document.querySelector('#modalRoot .modal-overlay')) return;
+    if (e.target.closest('input, textarea, select, button, a, label, .picker-list, [data-pk-open]')) return;
+    setTimeout(focusPack, 0);
+  }
+  document.addEventListener('mousedown', packFocusGuard);
+  window._pageCleanup = () => document.removeEventListener('mousedown', packFocusGuard);
+}
