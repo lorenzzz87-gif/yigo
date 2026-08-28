@@ -55,6 +55,19 @@ function enterConfirmSingle(o, line, notice) {
   const p = line.sku ? productByCode(line.sku) : null;
   const d = (p && p.dims) ? p.dims : {};
   const has = !!(p && p.dims && (p.dims.l || p.dims.w || p.dims.h || p.dims.kg));
+  // 尺寸已知一扫即发：老 SKU 已有记录 → 直接出库不停顿；只有新 SKU 才进确认态填尺寸
+  if (has && DB.settings.packAutoKnownDims) {
+    const parcel = { l: d.l || '', w: d.w || '', h: d.h || '', kg: d.kg || '' };
+    if (parcel.l !== '' || parcel.w !== '' || parcel.h !== '' || parcel.kg !== '') o.parcel = parcel;
+    packState.dims = { l: '', w: '', h: '', kg: '' };
+    rememberContents(o, 'fast');
+    verifyOrder(o);
+    agentPrint(o.trackingNo);
+    packLog(o.trackingNo || o.orderNo || '', 'fast', o.id);
+    packEvt('ok', t('尺寸已知，已直接出库：{no}', { no: o.trackingNo || o.orderNo }) + (notice || ''));
+    playBeep('ok');
+    return;
+  }
   packState.dims = { l: d.l ?? '', w: d.w ?? '', h: d.h ?? '', kg: d.kg ?? '' };
   packState.confirmSingle = { orderId: o.id, sku: line.sku, name: line.name, productId: p ? p.id : null, hadDims: has, notice: notice || '' };
   packEvt('info', has

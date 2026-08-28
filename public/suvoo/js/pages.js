@@ -982,6 +982,10 @@ function renderSettings(el) {
         <div class="sl-txt"><b>单件订单确认尺寸</b><span>单件订单扫单后确认长宽高重再出库，并按 SKU 记忆（下次自动带出）。关闭则扫单直接出库</span></div>
         <label class="checkbox-line"><input type="checkbox" data-set="packSingleFast" ${DB.settings.packSingleFast !== false ? 'checked' : ''}>开启</label>
       </div>
+      <div class="setting-line">
+        <div class="sl-txt"><b>尺寸已知时一扫即发</b><span>需先开启上一项。已记过尺寸的老 SKU 扫单直接出库不停顿，只有新 SKU 才停下来填尺寸</span></div>
+        <label class="checkbox-line"><input type="checkbox" data-set="packAutoKnownDims" ${DB.settings.packAutoKnownDims ? 'checked' : ''}>开启</label>
+      </div>
     </div>
     <div class="card">
       <div class="card-title">${icon('printer', 16)}面单打印助手</div>
