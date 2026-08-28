@@ -963,6 +963,10 @@ function renderSettings(el) {
     <div class="card">
       <div class="card-title">${icon('settings', 16)}偏好</div>
       <div class="setting-line">
+        <div class="sl-txt"><b>公司名称</b><span>显示在左上角与浏览器标题，留空则用默认名</span></div>
+        <input class="input" style="width:180px" data-set-brand value="${esc(DB.settings.brand || '')}" placeholder="${esc(typeof window !== 'undefined' && window.SUVOO_BRAND || 'SUVOO')}" maxlength="20">
+      </div>
+      <div class="setting-line">
         <div class="sl-txt"><b>扫描提示音</b><span>核对成功 / 重复 / 异常时播放不同提示音</span></div>
         <label class="checkbox-line"><input type="checkbox" data-set="beep" ${DB.settings.beep ? 'checked' : ''}>开启</label>
       </div>
@@ -1108,6 +1112,13 @@ function renderSettings(el) {
     save();
     toast('设置已保存', 'success');
   }));
+  // 公司名称：即时应用到侧栏与标题
+  el.querySelector('[data-set-brand]')?.addEventListener('change', e => {
+    DB.settings.brand = e.target.value.trim();
+    save();
+    if (typeof applyBrand === 'function') applyBrand();
+    toast('设置已保存', 'success');
+  });
   // 备份
   el.querySelector('[data-backup]').addEventListener('click', () => { exportBackup(); toast('备份文件已下载', 'success'); render(); });
   el.querySelector('[data-restore-btn]').addEventListener('click', () => el.querySelector('[data-restore]').click());

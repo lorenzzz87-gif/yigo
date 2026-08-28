@@ -36,6 +36,22 @@ function drawBackupHint() {
     ? `<span class="hint-pill">⚠ 建议去「设置」导出备份</span>` : '';
 }
 
+// 公司名称：设置里自填 > 实例注入的默认 > 内置 SUVOO；侧栏与标题栏一起改
+function brandName() {
+  const custom = (DB.settings && DB.settings.brand || '').trim();
+  if (custom) return custom;
+  if (typeof window !== 'undefined' && window.SUVOO_BRAND) return window.SUVOO_BRAND;
+  return 'SUVOO';
+}
+function applyBrand() {
+  const name = brandName();
+  const b = document.querySelector('.brand-text b');
+  if (b) b.textContent = name;
+  const logo = document.querySelector('.brand-logo img');
+  if (logo) logo.alt = name;
+  document.title = name + ' 进销存 · 面单核对';
+}
+
 function render() {
   if (window._pageCleanup) {
     try { window._pageCleanup(); } catch (e) { /* ignore */ }
@@ -51,6 +67,7 @@ function render() {
   // 静态文案先还原为中文源，再统一翻译（避免二次切换语言时键失配）
   const brandSub = document.querySelector('.brand-text span');
   if (brandSub) brandSub.textContent = '进销存 · 面单核对';
+  applyBrand();
   if (typeof updateSyncUI === 'function') updateSyncUI();
   if (typeof translateDOM === 'function') translateDOM(document.querySelector('.app'));
   window.scrollTo(0, 0);
