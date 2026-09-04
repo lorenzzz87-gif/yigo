@@ -596,7 +596,7 @@ function renderOrders(el) {
     <tbody data-obody>
     ${shown.map(o => `
       <tr data-id="${o.id}">
-        <td>${statusBadge(o)}</td>
+        <td>${statusBadge(o)}${o.status === 'pending' && !o.claimed ? `<span class="badge b-red" style="margin-left:4px">待接单</span>` : ''}</td>
         <td>${channelBadge(o.channel)}</td>
         <td class="mono">${esc(o.orderNo || '')}</td>
         <td class="mono">${esc(o.trackingNo || '')}</td>
@@ -606,7 +606,8 @@ function renderOrders(el) {
         <td class="muted small">${fmtDT(o.verifiedAt)}</td>
         <td><div class="row-actions">
           ${o.status === 'pending'
-            ? `<button class="btn btn-sm btn-accent" data-act="verify">${icon('check', 13)}核对</button>
+            ? `${!o.claimed ? `<button class="btn btn-sm btn-primary" data-act="claim">${icon('bell', 13)}接单</button>` : ''}
+               <button class="btn btn-sm btn-accent" data-act="verify">${icon('check', 13)}核对</button>
                <button class="btn btn-sm btn-ghost" data-act="edit">${icon('edit', 13)}</button>`
             : `<button class="btn btn-sm" data-act="undo">${icon('undo', 13)}撤销</button>`}
           <button class="btn btn-sm btn-ghost" data-act="del">${icon('trash', 13)}</button>
@@ -664,7 +665,10 @@ function renderOrders(el) {
     const o = DB.orders.find(x => x.id === id);
     if (!o) return;
     const act = btn.dataset.act;
-    if (act === 'verify') {
+    if (act === 'claim') {
+      claimOrder(id); // 内部 save + 同步 + render，并停铃/刷新提醒条
+      toast(t('已接单：{no}', { no: o.trackingNo || o.orderNo || '' }), 'success');
+    } else if (act === 'verify') {
       verifyOrder(o);
       toast(`已核对出库：${o.trackingNo || o.orderNo}`, 'success');
       render();
@@ -766,7 +770,7 @@ function openOrderModal(o = null, prefill = {}) {
       });
     const data = { channel: get('channel'), orderNo, trackingNo, carrier: get('carrier'), receiver: get('receiver'), note: get('note'), items: cleanItems };
     if (isEdit) Object.assign(o, data);
-    else DB.orders.unshift({ id: uid(), carrier: '', status: 'pending', createdAt: Date.now(), verifiedAt: null, ...data });
+    else DB.orders.unshift({ id: uid(), carrier: '', status: 'pending', claimed: true, claimedAt: Date.now(), createdAt: Date.now(), verifiedAt: null, ...data });
     save(); m.close();
     toast(isEdit ? '订单已更新' : '订单已添加', 'success');
     render();
@@ -836,7 +840,7 @@ function openOrderImport() {
       if (!groups.size) throw new Error('没有可导入的订单' + (dups.size ? `（${dups.size} 个运单号已存在）` : '，请检查运单号/订单号列是否已正确映射'));
       const now = Date.now();
       for (const g of groups.values()) {
-        DB.orders.unshift({ id: uid(), status: 'pending', createdAt: now, verifiedAt: null, ...g });
+        DB.orders.unshift({ id: uid(), status: 'pending', claimed: true, claimedAt: now, createdAt: now, verifiedAt: null, ...g });
       }
       save();
       return `导入 ${groups.size} 个订单` +
@@ -969,6 +973,10 @@ function renderSettings(el) {
       <div class="setting-line">
         <div class="sl-txt"><b>扫描提示音</b><span>核对成功 / 重复 / 异常时播放不同提示音</span></div>
         <label class="checkbox-line"><input type="checkbox" data-set="beep" ${DB.settings.beep ? 'checked' : ''}>开启</label>
+      </div>
+      <div class="setting-line">
+        <div class="sl-txt"><b>新订单响铃提醒</b><span>同步收到别处新下的待发订单时循环响铃 + 顶部提醒条，点「接单」后停；本机自己导入的不提醒</span></div>
+        <label class="checkbox-line"><input type="checkbox" data-set="orderAlert" ${DB.settings.orderAlert !== false ? 'checked' : ''}>开启</label>
       </div>
       <div class="setting-line">
         <div class="sl-txt"><b>核对时自动扣减库存</b><span>扫描核对订单时按商品明细自动出库；撤销核对自动回补</span></div>
@@ -1114,6 +1122,10 @@ function renderSettings(el) {
   el.querySelectorAll('[data-set]').forEach(cb => cb.addEventListener('change', () => {
     DB.settings[cb.dataset.set] = cb.checked;
     save();
+    if (cb.dataset.set === 'orderAlert') {
+      if (!cb.checked && typeof stopAlertLoop === 'function') stopAlertLoop();
+      if (typeof renderAlertBar === 'function') renderAlertBar();
+    }
     toast('设置已保存', 'success');
   }));
   // 公司名称：即时应用到侧栏与标题

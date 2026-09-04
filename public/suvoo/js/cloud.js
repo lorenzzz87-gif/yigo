@@ -185,8 +185,20 @@ async function syncNow(manual = false) {
     let changed = ops.length > 0;
     let r = applyDelta(DB.products, out.products);
     if (r.changed) { DB.products = r.list.sort((a, b) => String(a.sku).localeCompare(String(b.sku))); changed = true; }
+    // 记录合并前已知订单 id，用于识别「本次新到」的订单（响铃提醒用）
+    const prevOrderIds = new Set(DB.orders.map(o => o.id));
     r = applyDelta(DB.orders, out.orders);
     if (r.changed) { DB.orders = r.list.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0)); changed = true; }
+    // 新订单响铃：只对「同步来的、之前没见过的、待发未接单」的订单提醒；首次全量拉取(since=0)不响
+    if (since > 0) {
+      let arrived = 0;
+      for (const row of (out.orders || [])) {
+        if (row.deleted || prevOrderIds.has(row.id)) continue;
+        let d; try { d = JSON.parse(row.data); } catch (e) { continue; }
+        if (d && d.status === 'pending' && !d.claimed) arrived++;
+      }
+      if (arrived > 0 && typeof notifyNewOrders === 'function') notifyNewOrders(arrived);
+    }
     r = applyDelta(DB.moves, out.moves);
     if (r.changed) { DB.moves = r.list.sort((a, b) => (b.at || 0) - (a.at || 0)); changed = true; }
     for (const m of (out.meta || [])) {

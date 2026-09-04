@@ -80,6 +80,24 @@ a { color: var(--accent); text-decoration: none; }
 }
 .nav a.active .nav-badge { background: rgba(255, 255, 255, .25); }
 
+/* 新订单提醒条（固定在顶部居中） */
+.order-alert-bar {
+  position: fixed; top: 14px; left: 50%; transform: translateX(-50%);
+  z-index: 3000; display: flex; align-items: center; gap: 10px;
+  padding: 9px 14px; border-radius: 12px; max-width: calc(100vw - 24px);
+  background: var(--danger); color: #fff;
+  box-shadow: 0 8px 28px rgba(0, 0, 0, .22);
+  animation: oaPulse 1.2s ease-in-out infinite;
+}
+.order-alert-bar.muted { background: var(--warn); animation: none; }
+.order-alert-bar .oa-ico { display: flex; }
+.order-alert-bar .oa-msg { font-size: 14px; white-space: nowrap; }
+.order-alert-bar .oa-muted { font-size: 12px; opacity: .9; }
+.order-alert-bar .btn { border: none; }
+.order-alert-bar .btn.oa-mute { background: rgba(255, 255, 255, .18); color: #fff; }
+@keyframes oaPulse { 0%, 100% { box-shadow: 0 8px 28px rgba(220, 38, 38, .35); } 50% { box-shadow: 0 8px 34px rgba(220, 38, 38, .7); } }
+@media (max-width: 560px) { .order-alert-bar .oa-msg { white-space: normal; } }
+
 .lang-sel {
   width: 100%; margin-bottom: 10px; padding: 6px 9px; border-radius: 8px;
   background: rgba(255,255,255,.06); color: #CBD5E1; border: 1px solid rgba(255,255,255,.12);

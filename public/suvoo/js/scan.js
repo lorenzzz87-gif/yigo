@@ -8,13 +8,16 @@
 /* ---------- 提示音（全站共用） ---------- */
 let _actx = null;
 function playBeep(kind) {
-  if (!DB.settings.beep) return;
+  // 新订单提醒音走独立开关（orderAlert），不受扫描提示音总开关影响
+  if (kind === 'newOrder') { if (DB.settings.orderAlert === false) return; }
+  else if (!DB.settings.beep) return;
   try {
     _actx = _actx || new (window.AudioContext || window.webkitAudioContext)();
     if (_actx.state === 'suspended') _actx.resume();
     const seq = kind === 'ok' ? [[1175, 90]]
       : kind === 'tick' ? [[1568, 50]]
       : kind === 'dup' ? [[660, 90], [660, 90]]
+      : kind === 'newOrder' ? [[880, 130], [1320, 180]]
       : [[220, 340]];
     let t = _actx.currentTime + 0.01;
     for (const [f, d] of seq) {
