@@ -19,7 +19,7 @@ function rememberContents(o, kind) {
 }
 
 // 记录「刷单时间」：打包工位首次扫到该单开始处理的时刻（随订单同步上云）
-function markScan(o) { if (o && !o.scanAt) o.scanAt = Date.now(); }
+function markScan(o) { if (o) { if (!o.scanAt) o.scanAt = Date.now(); touchOrder(o); } }
 
 /* ---------- 面单打印助手（本工位局域打印，见 print-agent/安装说明） ---------- */
 async function agentPrint(no) {
@@ -239,6 +239,7 @@ function handleProductEntry(p, code) {
   if (done < line.qty) {
     target.packing.packed[line.key] = done + 1;
     target.packing.updatedAt = Date.now();
+    touchOrder(target);
     if (packIsComplete(target)) { completePack(target, false); return; }
     save();
     packEvt('ok', t('扫商品打开订单 {no}，已装 {name}（{n}/{qty}）', { no: target.trackingNo || target.orderNo, name: line.name, n: done + 1, qty: line.qty }) + notice);
@@ -278,6 +279,7 @@ function handlePackItem(cur, code) {
     }
     cur.packing.packed[line.key] = done + 1;
     cur.packing.updatedAt = Date.now();
+    touchOrder(cur);
     if (packIsComplete(cur)) {
       completePack(cur, false);
     } else {
@@ -569,6 +571,7 @@ function renderPack(el) {
     if (done >= line.qty) return;
     o.packing.packed[key] = done + 1;
     o.packing.updatedAt = Date.now();
+    touchOrder(o);
     if (packIsComplete(o)) completePack(o, false);
     else { save(); packEvt('ok', t('已装 {name}（{n}/{qty}）', {name: line.name, n: done + 1, qty: line.qty})); playBeep('tick'); }
     render(); focusPack();
@@ -581,6 +584,7 @@ function renderPack(el) {
     if (done > 0) {
       o.packing.packed[key] = done - 1;
       o.packing.updatedAt = Date.now();
+      touchOrder(o);
       save();
       packEvt('info', t('已回退 1 件'));
     }
@@ -612,6 +616,7 @@ function renderPack(el) {
     const ok = await confirmBox('清除本单的装箱进度并退出？', { danger: true, okText: '清除' });
     if (ok) {
       delete o.packing;
+      touchOrder(o);
       save();
       packState.currentOrderId = null;
       packEvt('info', t('已清除进度'));

@@ -95,11 +95,11 @@ function afterClaim() {
 }
 function claimOrder(id) {
   const o = DB.orders.find(x => x.id === id);
-  if (o && !o.claimed) { o.claimed = true; o.claimedAt = Date.now(); afterClaim(); }
+  if (o && !o.claimed) { o.claimed = true; o.claimedAt = Date.now(); touchOrder(o); afterClaim(); }
 }
 function claimAllOrders() {
   let any = false;
-  for (const o of unclaimedOrders()) { o.claimed = true; o.claimedAt = Date.now(); any = true; }
+  for (const o of unclaimedOrders()) { o.claimed = true; o.claimedAt = Date.now(); touchOrder(o); any = true; }
   if (any) afterClaim();
 }
 window.claimOrder = claimOrder;

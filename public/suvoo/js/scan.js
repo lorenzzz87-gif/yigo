@@ -73,6 +73,7 @@ function handleSortScan(code) {
   if (res === 'ok' && o) {
     o.sortedAt = Date.now();
     o.sortedCarrier = sortState.carrier;
+    touchOrder(o);
     save();
   }
   playBeep(res === 'ok' ? 'ok' : (res === 'dup' || res === 'nocarrier') ? 'dup' : 'err');

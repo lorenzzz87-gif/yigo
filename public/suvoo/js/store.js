@@ -125,11 +125,15 @@ function trackingExists(trackingNo) {
   return DB.orders.some(o => normCode(o.trackingNo) === s);
 }
 
+// 订单编辑时间戳：用于云同步 last-writer-wins，防止快照失效的设备用旧副本覆盖新状态
+function touchOrder(o) { if (o) o._u = Date.now(); }
+
 // 核对出库：标记已核对，按设置扣减库存
 function verifyOrder(o) {
   if (!o || o.status === 'verified') return false;
   o.status = 'verified';
   o.verifiedAt = Date.now();
+  touchOrder(o);
   delete o.packing; // 打包进度随出库清除
   if (DB.settings.deduct) {
     for (const it of (o.items || [])) {
@@ -147,6 +151,7 @@ function unverifyOrder(o) {
   if (!o || o.status !== 'verified') return false;
   o.status = 'pending';
   o.verifiedAt = null;
+  touchOrder(o);
   if (DB.settings.deduct) {
     for (const it of (o.items || [])) {
       const p = productByCode(it.sku);

@@ -769,8 +769,8 @@ function openOrderModal(o = null, prefill = {}) {
         return { sku: p ? p.sku : (it.sku || it.name), name: p ? p.name : (it.name || it.sku), qty: Math.max(1, Number(it.qty) || 1) };
       });
     const data = { channel: get('channel'), orderNo, trackingNo, carrier: get('carrier'), receiver: get('receiver'), note: get('note'), items: cleanItems };
-    if (isEdit) Object.assign(o, data);
-    else DB.orders.unshift({ id: uid(), carrier: '', status: 'pending', claimed: true, claimedAt: Date.now(), createdAt: Date.now(), verifiedAt: null, ...data });
+    if (isEdit) { Object.assign(o, data); touchOrder(o); }
+    else DB.orders.unshift({ id: uid(), carrier: '', status: 'pending', claimed: true, claimedAt: Date.now(), createdAt: Date.now(), verifiedAt: null, _u: Date.now(), ...data });
     save(); m.close();
     toast(isEdit ? '订单已更新' : '订单已添加', 'success');
     render();
@@ -840,7 +840,7 @@ function openOrderImport() {
       if (!groups.size) throw new Error('没有可导入的订单' + (dups.size ? `（${dups.size} 个运单号已存在）` : '，请检查运单号/订单号列是否已正确映射'));
       const now = Date.now();
       for (const g of groups.values()) {
-        DB.orders.unshift({ id: uid(), status: 'pending', claimed: true, claimedAt: now, createdAt: now, verifiedAt: null, ...g });
+        DB.orders.unshift({ id: uid(), status: 'pending', claimed: true, claimedAt: now, createdAt: now, verifiedAt: null, _u: now, ...g });
       }
       save();
       return `导入 ${groups.size} 个订单` +
