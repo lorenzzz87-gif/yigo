@@ -38,17 +38,28 @@ export const PlayerState = z.object({
   /** 殿内会话 id，不是 anonId */
   id: z.string(),
   name: z.string(),
+  /** 服务器估算的当前位置 */
   x: z.number(),
   z: z.number(),
+  /** 正在走向的目标点；站着或坐着时没有 */
+  tx: z.number().optional(),
+  tz: z.number().optional(),
   seat: Seat.nullable(),
   action: ActionSchema.nullable(),
+  /** 当前动作已经做了多久（毫秒），只在 snapshot 里有 */
+  actionElapsed: z.number().nonnegative().optional(),
 });
 export type PlayerState = z.infer<typeof PlayerState>;
+
+export const PlayerUpdate = PlayerState.partial().required({ id: true });
+export type PlayerUpdate = z.infer<typeof PlayerUpdate>;
 
 export const ServerMessage = z.discriminatedUnion('type', [
   z.object({
     type: z.literal('snapshot'),
     selfId: z.string(),
+    /** true：30 秒内带同一个匿名 ID 重连，位置和蒲团都还在 */
+    resumed: z.boolean(),
     players: z.array(PlayerState),
     incense: z.number().int().nonnegative(),
     lamps: z.number().int().nonnegative(),
@@ -57,7 +68,7 @@ export const ServerMessage = z.discriminatedUnion('type', [
     type: z.literal('delta'),
     joined: z.array(PlayerState).optional(),
     left: z.array(z.string()).optional(),
-    updated: z.array(PlayerState.partial().required({ id: true })).optional(),
+    updated: z.array(PlayerUpdate).optional(),
   }),
   z.object({ type: z.literal('seat_ok'), seat: Seat }),
   z.object({ type: z.literal('seat_taken'), seat: Seat }),
@@ -66,9 +77,16 @@ export const ServerMessage = z.discriminatedUnion('type', [
 ]);
 export type ServerMessage = z.infer<typeof ServerMessage>;
 
+/** 保活：客户端发 ping，服务器自动回 pong，不唤醒殿。 */
+export const PING = 'ping';
+export const PONG = 'pong';
+
+/** 单条消息的长度上限（字符）。合法消息远小于它。 */
+export const MAX_MESSAGE_LENGTH = 256;
+
 /** 解析一条客户端消息；任何畸形输入都返回 null，不抛错。 */
 export function parseClientMessage(raw: unknown): ClientMessage | null {
-  if (typeof raw !== 'string') return null;
+  if (typeof raw !== 'string' || raw.length > MAX_MESSAGE_LENGTH) return null;
   let json: unknown;
   try {
     json = JSON.parse(raw);
@@ -76,5 +94,18 @@ export function parseClientMessage(raw: unknown): ClientMessage | null {
     return null;
   }
   const result = ClientMessage.safeParse(json);
+  return result.success ? result.data : null;
+}
+
+/** 解析一条服务器消息；格式不对返回 null。 */
+export function parseServerMessage(raw: unknown): ServerMessage | null {
+  if (typeof raw !== 'string') return null;
+  let json: unknown;
+  try {
+    json = JSON.parse(raw);
+  } catch {
+    return null;
+  }
+  const result = ServerMessage.safeParse(json);
   return result.success ? result.data : null;
 }

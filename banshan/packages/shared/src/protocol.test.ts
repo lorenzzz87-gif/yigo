@@ -46,3 +46,43 @@ describe('copy', () => {
     for (const n of zhCN.names) expect(n).toMatch(/的人$/);
   });
 });
+
+describe('rooms and time zones', () => {
+  it('buckets the UTC offset to whole hours', async () => {
+    const { tzBucket } = await import('./index');
+    expect(tzBucket(-60)).toBe(1); // 意大利冬令时
+    expect(tzBucket(-120)).toBe(2);
+    expect(tzBucket(300)).toBe(-5);
+    expect(tzBucket(-330)).toBe(6); // 印度 +5:30 → +6
+    expect(tzBucket(0)).toBe(0);
+    expect(tzBucket(-9999)).toBe(14);
+    expect(tzBucket(9999)).toBe(-12);
+  });
+
+  it('round-trips room ids and rejects bad ones', async () => {
+    const { makeRoomId, parseRoomId } = await import('./index');
+    expect(parseRoomId(makeRoomId(-5, 12))).toEqual({ bucket: -5, index: 12 });
+    expect(parseRoomId(makeRoomId(8, 0))).toEqual({ bucket: 8, index: 0 });
+    for (const bad of [
+      '',
+      'tz99.1',
+      'tz-13.0',
+      'tz1',
+      'tz1.x',
+      '../tz1.0',
+      'tz1.0/x',
+      'tz1.1234567',
+    ]) {
+      expect(parseRoomId(bad), bad).toBeNull();
+    }
+  });
+
+  it('has a name pool of at least 100', () => {
+    expect(zhCN.names.length).toBeGreaterThanOrEqual(100);
+  });
+
+  it('drops oversized client messages', () => {
+    const big = JSON.stringify({ type: 'stand', pad: 'x'.repeat(1000) });
+    expect(parseClientMessage(big)).toBeNull();
+  });
+});

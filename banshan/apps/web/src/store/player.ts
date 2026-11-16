@@ -1,98 +1,104 @@
+import { LAYOUT, type Action } from '@banshan/shared';
 import {
-  INITIAL_AVATAR,
-  LAYOUT,
-  animState,
-  canAct,
-  findPath,
-  heightAt,
-  reduceAvatar,
-  seatPosition,
-  type Action,
-  type AnimState,
-  type AvatarState,
-  type Vec2,
-} from '@banshan/shared';
+  actorAct,
+  actorPlaceOnSeat,
+  actorSitAt,
+  actorStand,
+  actorWalkTo,
+  createActor,
+} from '../avatar/actor';
+import { net } from '../net/client';
+import { getName } from '../net/identity';
 import { useAppStore } from './index';
 
 /**
- * 自己的位置、路径和动作。每帧都在变，所以不放进 React 状态，由 useFrame 直接读写；
+ * 自己。位置和动作每帧都在变，不放进 React 状态；
  * 界面需要的那一小部分（姿态、动作）变化时同步到 zustand。
+ * 每个操作先在本机生效，再告诉服务器；离线时只在本机生效。
  */
-export const player = {
-  x: LAYOUT.spawn.x as number,
-  z: LAYOUT.spawn.z as number,
-  y: heightAt(LAYOUT.spawn.x, LAYOUT.spawn.z),
-  /** 朝向，弧度；0 朝 +z，初始面向山门 */
-  heading: Math.PI,
-  path: [] as Vec2[],
-  avatar: INITIAL_AVATAR as AvatarState,
-  /** 正坐着的蒲团 */
-  seat: null as number | null,
-  /** 正走过去准备坐下的蒲团 */
-  pendingSeat: null as number | null,
-  // 以下由 Player 每帧更新，供 Avatar 读取
-  anim: 'stand' as AnimState,
-  seated: false,
-  animTime: 0,
-};
+export const player = createActor(getName(), LAYOUT.spawn.x, LAYOUT.spawn.z);
 
-/** 走路速度，米/秒 */
-export const WALK_SPEED = 3;
-/** 坐下后面朝佛像（-z 方向） */
-export const SEATED_HEADING = Math.PI;
+/** 已经向服务器请求、还没得到答复的蒲团 */
+let requestedSeat: number | null = null;
 
-function publish(): void {
+/** 把姿态和动作同步给界面。 */
+export function publishAvatar(): void {
   const { posture, action } = player.avatar;
   const s = useAppStore.getState();
   if (s.posture !== posture || s.action !== action) s.setAvatar(posture, action);
 }
 
-export function setAvatar(next: AvatarState): void {
-  player.avatar = next;
-  publish();
-}
-
 /** 朝 (x, z) 走。目标不可走时，走到最近的可走点。坐着的话先起身。 */
 export function walkTo(x: number, z: number): void {
-  const path = findPath(player, { x, z });
-  if (path.length === 0) return;
-  player.path = path;
-  player.seat = null;
-  player.pendingSeat = null;
-  setAvatar(reduceAvatar(player.avatar, { type: 'walk' }, performance.now()));
+  requestedSeat = null;
+  if (!actorWalkTo(player, x, z, performance.now())) return;
+  const goal = player.path.at(-1)!;
+  net.send({ type: 'move', x: goal.x, z: goal.z });
+  publishAvatar();
 }
 
-/** 走到某个蒲团并坐下。 */
+/** 请求坐到某个蒲团。在线时由服务器裁决（§4.5）；离线时直接坐。 */
 export function sitAt(seat: number): void {
-  const p = seatPosition(seat);
-  walkTo(p.x, p.z);
-  if (player.path.length === 0) {
-    // 已经站在蒲团上
-    arriveAtSeat(seat);
+  if (net.send({ type: 'sit', seat })) {
+    requestedSeat = seat;
   } else {
-    player.pendingSeat = seat;
+    actorSitAt(player, seat, performance.now());
+    publishAvatar();
   }
 }
 
-export function arriveAtSeat(seat: number): void {
-  const p = seatPosition(seat);
-  player.x = p.x;
-  player.z = p.z;
-  player.path = [];
-  player.seat = seat;
-  player.pendingSeat = null;
-  setAvatar(reduceAvatar(player.avatar, { type: 'sit' }, performance.now()));
+/** 服务器答应了：走过去坐下。 */
+export function onSeatOk(seat: number): void {
+  if (player.seat === seat) return;
+  if (requestedSeat !== seat) {
+    // 等答复的时候已经走开了，把蒲团还回去
+    net.send({ type: 'stand' });
+    return;
+  }
+  requestedSeat = null;
+  actorSitAt(player, seat, performance.now());
+  publishAvatar();
+}
+
+/** 服务器说这个蒲团有人了。 */
+export function onSeatTaken(seat: number): void {
+  if (requestedSeat === seat) requestedSeat = null;
+  if (player.seat === seat || player.pendingSeat === seat) {
+    actorStand(player, performance.now());
+    player.path = [];
+    publishAvatar();
+  }
 }
 
 /** 做一个身体动作。礼拜只在坐着时有效；走着的时候会先停下。 */
 export function doAction(action: Action): void {
-  const now = performance.now();
-  if (!canAct(player.avatar, action)) return;
-  player.path = [];
-  player.pendingSeat = null;
-  setAvatar(reduceAvatar(player.avatar, { type: 'act', action }, now));
+  if (!actorAct(player, action, performance.now())) return;
+  net.send({ type: 'act', action });
+  publishAvatar();
 }
 
-export function currentAnim(now: number): AnimState {
-  return animState(player.avatar, now);
+/** 把自己放到服务器记着的位置上（刚进殿，或 30 秒内重连）。 */
+export function adoptServerState(state: { x: number; z: number; seat: number | null }): void {
+  const now = performance.now();
+  requestedSeat = null;
+  player.path = [];
+  if (state.seat !== null) {
+    actorPlaceOnSeat(player, state.seat, now);
+  } else {
+    if (player.seat !== null || player.pendingSeat !== null) actorStand(player, now);
+    player.x = state.x;
+    player.z = state.z;
+  }
+  publishAvatar();
+}
+
+/** 断开太久、服务器已经不记得自己了：留在原地，把现在的状态重新告诉服务器。 */
+export function reannounce(): void {
+  if (player.seat !== null) {
+    requestedSeat = player.seat;
+    net.send({ type: 'sit', seat: player.seat });
+  } else {
+    const goal = player.path.at(-1) ?? player;
+    net.send({ type: 'move', x: goal.x, z: goal.z });
+  }
 }

@@ -1,5 +1,8 @@
 import { Canvas } from '@react-three/fiber';
 import { Player } from './avatar/Player';
+import { Remotes } from './avatar/Remotes';
+import { net } from './net/client';
+import { remotes } from './net/remotes';
 import { CameraRig } from './scene/CameraRig';
 import { cameraState } from './scene/cameraState';
 import { MoveMarker } from './scene/MoveMarker';
@@ -21,7 +24,16 @@ export function App() {
           if (import.meta.env.DEV) {
             // 仅开发环境：给调试和自动化检查用
             Object.assign(window, {
-              __banshan: { player, cameraState, walkTo, sitAt, doAction, three: state },
+              __banshan: {
+                player,
+                cameraState,
+                walkTo,
+                sitAt,
+                doAction,
+                net,
+                remotes,
+                three: state,
+              },
             });
           }
         }}
@@ -29,6 +41,7 @@ export function App() {
         <Sky />
         <Temple />
         <Player />
+        <Remotes />
         <MoveMarker />
         <CameraRig />
       </Canvas>

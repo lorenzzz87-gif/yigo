@@ -3,10 +3,12 @@ import { useFrame } from '@react-three/fiber';
 import { useMemo, useRef } from 'react';
 import { Quaternion, Vector3, type Group, type Mesh } from 'three';
 import { INK } from '../scene/palette';
+import { NameTag } from './NameTag';
 import { MODEL, blendPose, bodyMetrics, targetPose, type Pose } from './pose';
 
 /** 每帧从这里读一个角色此刻的状态 */
 export interface AvatarSource {
+  name: string;
   x: number;
   y: number;
   z: number;
@@ -28,7 +30,7 @@ const DOWN = new Vector3(0, -1, 0);
  * 小沙弥白模：锥身、球头、两条手臂，木鱼和念珠只在用到时出现。
  * 姿势每帧朝目标平滑靠拢，所以七个状态之间怎么切都不会跳。
  */
-export function Avatar({ source }: { source: AvatarSource }) {
+export function Avatar({ source, showName = true }: { source: AvatarSource; showName?: boolean }) {
   const root = useRef<Group>(null);
   const lean = useRef<Group>(null);
   const body = useRef<Mesh>(null);
@@ -94,6 +96,9 @@ export function Avatar({ source }: { source: AvatarSource }) {
 
   return (
     <group ref={root}>
+      {showName && (
+        <NameTag source={source} y={MODEL.bodyHeight + MODEL.headAbove + MODEL.headRadius + 0.22} />
+      )}
       <group ref={lean}>
         <mesh ref={body}>
           <cylinderGeometry

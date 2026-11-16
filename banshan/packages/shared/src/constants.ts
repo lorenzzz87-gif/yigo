@@ -44,3 +44,41 @@ export const ACTION_DURATION_MS: Record<Action, number> = {
   muyu: 6000,
   nianzhu: 8000,
 };
+
+/** 走路速度，米/秒。前端按它播走路，服务器按它估算每个人此刻走到了哪里。 */
+export const WALK_SPEED = 3;
+
+/** 服务器关闭连接时用的代码 */
+export const CLOSE_CODE = {
+  /** 这个殿满了，客户端应重新 /join */
+  roomFull: 4001,
+  /** 同一个匿名 ID 在别处又连了进来 */
+  replaced: 4002,
+  /** 连续超频 */
+  rateLimited: 4008,
+} as const;
+
+/** 时区桶的范围：UTC 偏移四舍五入到整小时（§4.3） */
+export const TZ_BUCKET_MIN = -12;
+export const TZ_BUCKET_MAX = 14;
+
+/** 由 Date#getTimezoneOffset()（分钟，东区为负）得到时区桶。 */
+export function tzBucket(timezoneOffsetMinutes: number): number {
+  const hours = Math.round(-timezoneOffsetMinutes / 60);
+  return Math.min(TZ_BUCKET_MAX, Math.max(TZ_BUCKET_MIN, hours)) + 0;
+}
+
+const ROOM_ID = /^tz(-?\d{1,2})\.(\d{1,6})$/;
+
+export function makeRoomId(bucket: number, index: number): string {
+  return `tz${bucket}.${index}`;
+}
+
+/** 解析殿的 ID；格式不对或时区越界返回 null。 */
+export function parseRoomId(roomId: string): { bucket: number; index: number } | null {
+  const m = ROOM_ID.exec(roomId);
+  if (!m) return null;
+  const bucket = Number(m[1]);
+  if (bucket < TZ_BUCKET_MIN || bucket > TZ_BUCKET_MAX) return null;
+  return { bucket, index: Number(m[2]) };
+}

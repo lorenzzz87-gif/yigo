@@ -28,6 +28,7 @@ writeFileSync(
   join(out, 'banshan-preview.html'),
   `<title>半山 · 云上禅寺</title>
 <meta name="theme-color" content="#EDE8DD" />
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;500&display=swap" />
 <style>${styles}</style>
 <div id="root"></div>
 <script type="module" src="app.js"></script>
