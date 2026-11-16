@@ -12,6 +12,8 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+    // Separate pnpm workspace with its own toolchain.
+    "banshan/**",
   ]),
 ]);
 
