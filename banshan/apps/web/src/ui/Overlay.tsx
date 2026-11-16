@@ -3,13 +3,12 @@ import { useAppStore } from '../store';
 
 export function Overlay() {
   const sceneReady = useAppStore((s) => s.sceneReady);
+  const hintVisible = useAppStore((s) => s.hintVisible);
   return (
     <div className="overlay">
-      <header className="brand">
-        <h1>{zhCN.brand.name}</h1>
-        <p>{zhCN.brand.subtitle}</p>
-      </header>
-      {!sceneReady && <p>{zhCN.loading}</p>}
+      <p className={`hint ${sceneReady && hintVisible ? '' : 'hint-hidden'}`}>
+        {sceneReady ? zhCN.firstHint : zhCN.loading}
+      </p>
       <p className="footer">{zhCN.footer}</p>
     </div>
   );

@@ -35,24 +35,28 @@ body,
   text-align: center;
 }
 
-.brand h1 {
+.hint {
   margin: 0;
-  font-size: 28px;
-  font-weight: 500;
-  letter-spacing: 0.4em;
-  text-indent: 0.4em;
+  padding: 8px 14px;
+  font-size: 14px;
+  letter-spacing: 0.08em;
+  background: rgb(237 232 221 / 70%);
+  transition: opacity 1.2s ease;
 }
 
-.brand p {
-  margin: 6px 0 0;
-  font-size: 13px;
-  letter-spacing: 0.5em;
-  text-indent: 0.5em;
-  color: var(--danmo);
+.hint-hidden {
+  opacity: 0;
 }
 
 .footer {
   margin: 0;
   font-size: 11px;
   color: var(--danmo);
+}
+
+canvas {
+  touch-action: none;
+  -webkit-tap-highlight-color: transparent;
+  user-select: none;
+  -webkit-user-select: none;
 }
