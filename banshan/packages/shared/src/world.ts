@@ -128,3 +128,17 @@ export function seatPosition(seat: number): Vec2 {
   const row = Math.floor(seat / cols);
   return { x: (col - (cols - 1) / 2) * spacing, z: firstRowZ - row * spacing };
 }
+
+/** 蒲团顶面比地面高出的高度 */
+export const SEAT_HEIGHT = 0.14;
+
+/** (x, z) 周围 radius 米内最近的蒲团；没有则返回 null。 */
+export function nearestSeat(x: number, z: number, radius: number): number | null {
+  const { cols, spacing, firstRowZ } = LAYOUT.seats;
+  const rows = SEAT_COUNT / cols;
+  const col = Math.min(cols - 1, Math.max(0, Math.round(x / spacing + (cols - 1) / 2)));
+  const row = Math.min(rows - 1, Math.max(0, Math.round((firstRowZ - z) / spacing)));
+  const seat = row * cols + col;
+  const p = seatPosition(seat);
+  return Math.hypot(p.x - x, p.z - z) <= radius ? seat : null;
+}

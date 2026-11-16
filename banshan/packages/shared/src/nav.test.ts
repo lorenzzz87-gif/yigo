@@ -6,6 +6,7 @@ import {
   TERRACE_Y,
   findPath,
   heightAt,
+  nearestSeat,
   isWalkable,
   nearestWalkable,
   regionIndexAt,
@@ -66,6 +67,22 @@ describe('world', () => {
     const p = nearestWalkable(0, -30);
     expect(p).toMatchObject({ x: 0, z: -19.5 });
     expect(isWalkable(p.x, p.z)).toBe(true);
+  });
+});
+
+describe('nearestSeat', () => {
+  it('finds the cushion you are standing next to', () => {
+    for (const seat of [0, 9, 45, 90, 99]) {
+      const p = seatPosition(seat);
+      expect(nearestSeat(p.x + 0.3, p.z - 0.4, 2)).toBe(seat);
+    }
+  });
+
+  it('returns null when no cushion is within reach', () => {
+    expect(nearestSeat(0, 10, 2)).toBeNull();
+    expect(nearestSeat(11.5, -1, 2)).toBeNull();
+    expect(nearestSeat(0, -1.9, 2)).toBeNull();
+    expect(nearestSeat(0.8, -2.1, 2)).not.toBeNull();
   });
 });
 

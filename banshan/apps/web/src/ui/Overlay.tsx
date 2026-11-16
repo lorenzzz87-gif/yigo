@@ -1,5 +1,6 @@
 import { zhCN } from '@banshan/shared';
 import { useAppStore } from '../store';
+import { ActionBar } from './ActionBar';
 
 export function Overlay() {
   const sceneReady = useAppStore((s) => s.sceneReady);
@@ -9,7 +10,7 @@ export function Overlay() {
       <p className={`hint ${sceneReady && hintVisible ? '' : 'hint-hidden'}`}>
         {sceneReady ? zhCN.firstHint : zhCN.loading}
       </p>
-      <p className="footer">{zhCN.footer}</p>
+      {sceneReady && <ActionBar />}
     </div>
   );
 }

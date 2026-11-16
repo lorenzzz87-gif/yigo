@@ -48,10 +48,102 @@ body,
   opacity: 0;
 }
 
+.bottom {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  max-width: 440px;
+}
+
+.bottom button {
+  pointer-events: auto;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: none;
+  color: var(--jiaomo);
+  font: inherit;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
+}
+
+.bottom button:focus-visible {
+  outline: 1px solid var(--jiaomo);
+  outline-offset: -4px;
+}
+
+/* 物件按钮：走近才浮出，离开就消失 */
+.object-button {
+  min-width: 96px;
+  min-height: 44px;
+  padding: 0 20px;
+  font-size: 15px;
+  letter-spacing: 0.3em;
+  text-indent: 0.3em;
+  background: rgb(237 232 221 / 80%) !important;
+  border: 1px solid var(--jiaomo) !important;
+}
+
+/* 动作栏：无底框，墨线分隔 */
+.action-bar {
+  display: flex;
+  width: 100%;
+  text-shadow:
+    0 0 6px var(--xuan),
+    0 0 2px var(--xuan);
+}
+
+.action {
+  position: relative;
+  flex: 1;
+  min-width: 44px;
+  min-height: 52px;
+  font-size: 16px;
+  letter-spacing: 0.25em;
+  text-indent: 0.25em;
+}
+
+.action + .action {
+  border-left: 1px solid rgb(43 43 40 / 55%) !important;
+}
+
+/* 正在做的那一项：下面一道墨线 */
+.action::after {
+  content: '';
+  position: absolute;
+  left: 30%;
+  right: 30%;
+  bottom: 8px;
+  height: 1.5px;
+  background: var(--jiaomo);
+  transform: scaleX(0);
+  transition: transform 0.25s ease;
+}
+
+.action[aria-pressed='true']::after {
+  transform: scaleX(1);
+}
+
+.action:disabled {
+  color: rgb(43 43 40 / 32%);
+  cursor: default;
+}
+
 .footer {
   margin: 0;
   font-size: 11px;
   color: var(--danmo);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .action::after,
+  .hint {
+    transition: none;
+  }
 }
 
 canvas {

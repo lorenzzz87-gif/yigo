@@ -6,7 +6,7 @@ import { MoveMarker } from './scene/MoveMarker';
 import { Sky } from './scene/Sky';
 import { Temple } from './scene/Temple';
 import { useAppStore } from './store';
-import { player, walkTo } from './store/player';
+import { doAction, player, sitAt, walkTo } from './store/player';
 import { Overlay } from './ui/Overlay';
 
 export function App() {
@@ -20,7 +20,9 @@ export function App() {
           setSceneReady(true);
           if (import.meta.env.DEV) {
             // 仅开发环境：给调试和自动化检查用
-            Object.assign(window, { __banshan: { player, cameraState, walkTo, three: state } });
+            Object.assign(window, {
+              __banshan: { player, cameraState, walkTo, sitAt, doAction, three: state },
+            });
           }
         }}
       >

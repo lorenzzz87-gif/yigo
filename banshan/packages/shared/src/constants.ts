@@ -33,3 +33,14 @@ export const DAY_PHASE_TRANSITION_MS = 60_000;
 
 export const ACTIONS = ['hezi', 'bai', 'muyu', 'nianzhu'] as const;
 export type Action = (typeof ACTIONS)[number];
+
+/**
+ * 每个动作做一遍的时长。协议里只有「开始做」没有「停下」（§4.5），
+ * 所以动作都是做完一遍自己收起；想继续就再点一次。
+ */
+export const ACTION_DURATION_MS: Record<Action, number> = {
+  hezi: 4000,
+  bai: 5000,
+  muyu: 6000,
+  nianzhu: 8000,
+};

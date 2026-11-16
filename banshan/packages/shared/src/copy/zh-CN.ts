@@ -8,6 +8,7 @@ export const zhCN = {
   loading: '山门已开，稍候。',
   firstHint: '点地面走动，拖动看看四周。这里不用说话。',
   rename: '换个名字',
+  actionBarLabel: '身体动作',
   bellSoon: '钟声将至。',
   incenseDone: '一炷香尽了。',
   actions: { hezi: '合十', bai: '礼拜', muyu: '木鱼', nianzhu: '念珠' },
