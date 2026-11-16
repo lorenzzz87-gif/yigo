@@ -21,8 +21,8 @@ export function App() {
         dpr={[1, 2]}
         onCreated={(state) => {
           setSceneReady(true);
-          if (import.meta.env.DEV) {
-            // 仅开发环境：给调试和自动化检查用
+          if (import.meta.env.DEV || import.meta.env.VITE_DEBUG_HOOKS === '1') {
+            // 仅开发环境和预览包：给调试和自动化检查用
             Object.assign(window, {
               __banshan: {
                 player,
